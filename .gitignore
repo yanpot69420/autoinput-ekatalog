@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+
+# Data penyedia dan status jalannya. Jangan sampai ikut ter-push:
+# template terisi memuat harga, dokumen, dan identitas klien.
+data/
+out/
+templates/
+config/
+*.xlsx
+*.status.json

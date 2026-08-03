@@ -1,0 +1,278 @@
+"""Definisi template Excel universal yang diisi penyedia.
+
+Disusun dari pembacaan langsung form `penyedia.inaproc.id/products/add` untuk
+kategori Jasa (3.1 Galian) dan Barang (Meja Kerja) -- lihat
+`docs/form-tambah-produk.md`.
+
+Empat bagian:
+
+* **Kolom inti** -- selalu ada, apa pun kategorinya.
+* **Kolom khusus Barang** -- bagian Pengiriman, TKDN, dan PPnBM hanya muncul
+  bila kategorinya bertipe Barang. Untuk Jasa dan Digital dikosongkan.
+* **Blok atribut** -- pasangan Atribut/Nilai untuk `Spesifikasi Produk >
+  Informasi Utama`, yang isinya berbeda tiap Kategori Level 3. Di form
+  bentuknya array berindeks, bukan field bernama tetap.
+* **Blok lampiran** -- pasangan nama dokumen dan path berkas PDF-nya.
+
+Kategori ditulis sebagai **satu kolom berisi jalur lengkap**, mengikuti bentuk
+pemilihnya di portal: satu kotak pencarian bertingkat, bukan tiga dropdown.
+Ini juga menghilangkan ambiguitas 71 nama Level 3 yang dipakai lebih dari
+sekali di seluruh katalog.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from . import references as ref
+
+TIPE_BARANG = "Barang"
+TIPE_JASA = "Jasa"
+TIPE_DIGITAL = "Digital"
+TIPE_PRODUK = (TIPE_BARANG, TIPE_JASA, TIPE_DIGITAL)
+
+JUMLAH_SLOT_ATRIBUT = 8
+JUMLAH_SLOT_LAMPIRAN = 5
+
+PEMISAH_KATEGORI = " > "
+
+FOTO_EXT = (".jpg", ".jpeg", ".png")
+VIDEO_EXT = (".mp4", ".mov")
+DOKUMEN_EXT = (".pdf",)
+
+BATAS_VIDEO_MB = 50
+BATAS_DOKUMEN_MB = 10
+
+
+@dataclass(frozen=True)
+class Field:
+    key: str
+    label: str
+    group: str
+    required: bool = False
+    options: tuple[str, ...] = ()
+    hint: str = ""
+    numeric: bool = False
+    url: bool = False
+    file_ext: tuple[str, ...] = ()
+    max_mb: int = 0
+    min_len: int = 0
+    max_len: int = 0
+    # Kosong berarti berlaku untuk semua tipe produk.
+    only_for: tuple[str, ...] = field(default_factory=tuple)
+    # Nama daftar di sheet rujukan, dipakai bila pilihannya terlalu panjang
+    # untuk ditulis langsung di sel (batas Excel 255 karakter).
+    lookup: str = ""
+    width: int = 22
+
+    @property
+    def is_file(self) -> bool:
+        return bool(self.file_ext)
+
+    def applies_to(self, tipe: str) -> bool:
+        return not self.only_for or not tipe or tipe in self.only_for
+
+
+G_KATEGORI = "Kategori"
+G_PRODUK = "Informasi Produk"
+G_MEDIA = "Foto & Video"
+G_SERTIFIKAT = "Merek, SNI & TKDN"
+G_PDN = "KBKI & PDN"
+G_PAJAK = "Pajak"
+G_HARGA = "Harga & Stok"
+G_KIRIM = "Pengiriman (khusus Barang)"
+G_ATRIBUT = "Atribut Khusus Kategori"
+G_LAMPIRAN = "Lampiran Dokumen"
+
+CORE_FIELDS: tuple[Field, ...] = (
+    # --- Kategori: satu kolom jalur lengkap, seperti kotak pencarian di portal.
+    Field("kategori", "Kategori", G_KATEGORI, required=True,
+          hint="Salin dari sheet 'Daftar Kategori'. Format: Level 1 > Level 2 > Level 3",
+          width=64),
+    Field("tipe_produk", "Tipe Produk", G_KATEGORI, options=TIPE_PRODUK,
+          hint="Opsional — portal menentukannya dari kategori", width=14),
+
+    # --- Informasi produk
+    Field("produk_sektoral", "Daftar Produk Sektoral", G_PRODUK,
+          hint="Wajib hanya bila kategorinya menyediakan daftar ini", width=30),
+    Field("nama_produk", "Nama Produk", G_PRODUK, required=True,
+          min_len=5, max_len=250, width=44),
+    Field("deskripsi", "Deskripsi", G_PRODUK, max_len=2000, width=44),
+
+    # --- Foto & video: form meminta unggah berkas, bukan tautan.
+    Field("foto_1", "Foto Utama", G_MEDIA, required=True, file_ext=FOTO_EXT,
+          hint="Path berkas di komputer. 300x300 s.d. 2048x2048 px", width=38),
+    Field("foto_2", "Foto 2", G_MEDIA, file_ext=FOTO_EXT, width=32),
+    Field("foto_3", "Foto 3", G_MEDIA, file_ext=FOTO_EXT, width=32),
+    Field("foto_4", "Foto 4", G_MEDIA, file_ext=FOTO_EXT, width=32),
+    Field("foto_5", "Foto 5", G_MEDIA, file_ext=FOTO_EXT, width=32),
+    Field("video_berkas", "Video Produk", G_MEDIA, file_ext=VIDEO_EXT,
+          max_mb=BATAS_VIDEO_MB, hint="Path berkas .mp4 atau .mov", width=32),
+    Field("video_url", "URL Video Produk", G_MEDIA, url=True,
+          hint="Tautan YouTube", width=32),
+
+    # --- Merek, SNI, TKDN: saklar. Field turunannya muncul saat dinyalakan dan
+    # belum dipetakan, jadi belum ada kolomnya.
+    Field("merek_aktif", "Punya Merek", G_SERTIFIKAT, options=ref.YA_TIDAK,
+          hint="Rincian merek belum didukung", width=16),
+    Field("sni_aktif", "Punya Sertifikat SNI", G_SERTIFIKAT, options=ref.YA_TIDAK,
+          hint="Rincian SNI belum didukung", width=18),
+    Field("tkdn_aktif", "Punya Sertifikat TKDN", G_SERTIFIKAT, options=ref.YA_TIDAK,
+          only_for=(TIPE_BARANG,),
+          hint="Hanya untuk produk Barang; rincian belum didukung", width=20),
+
+    # --- KBKI & PDN
+    Field("kbki", "Kode KBKI", G_PDN, required=True,
+          hint="Kode saja, mis. 54310. Daftarnya berbeda tiap kategori", width=16),
+    Field("pdn_klasifikasi", "Klasifikasi Produk", G_PDN, required=True,
+          options=ref.KLASIFIKASI_PDN, width=18),
+    Field("pdn_lokasi_produksi", "Lokasi Produksi", G_PDN, required=True,
+          options=ref.LOKASI_PRODUKSI, lookup="Lokasi Produksi", width=32),
+    Field("pdn_tenaga_kerja", "Tenaga Kerja dalam Proses Produksi", G_PDN,
+          required=True, options=ref.TENAGA_KERJA, lookup="Tenaga Kerja", width=32),
+    Field("pdn_bahan_baku", "Bahan Baku dalam Proses Produksi", G_PDN,
+          required=True, options=ref.BAHAN_BAKU, lookup="Bahan Baku", width=32),
+
+    # --- Pajak
+    Field("ppn", "PPN", G_PAJAK, required=True, options=ref.PPN, width=12),
+    Field("ppnbm_aktif", "Aktifkan PPnBM", G_PAJAK, options=ref.AKTIF,
+          only_for=(TIPE_BARANG,),
+          hint="Hanya untuk produk Barang", width=18),
+    Field("kuantitas_desimal", "Kuantitas Desimal", G_PAJAK, options=ref.AKTIF,
+          hint="Hanya muncul di sebagian kategori", width=18),
+
+    # --- Harga & stok
+    Field("minimum_pembelian", "Minimum Pembelian", G_HARGA, numeric=True,
+          hint="Kosong berarti 1", width=18),
+    Field("harga_produk", "Harga Produk", G_HARGA, required=True, numeric=True,
+          hint="Angka polos, di luar pajak & ongkir, tidak boleh 0", width=18),
+    Field("harga_zonasi", "Harga Zonasi", G_HARGA, options=ref.AKTIF,
+          hint="Hanya muncul di sebagian kategori; rincian belum didukung",
+          width=16),
+    Field("stok", "Jumlah Stok", G_HARGA, required=True, numeric=True, width=14),
+    Field("satuan_produk", "Satuan Produk", G_HARGA, required=True,
+          options=ref.SATUAN_PRODUK, lookup="Satuan Produk", width=18),
+    Field("pre_order", "Pre Order", G_HARGA, options=ref.AKTIF, width=14),
+    Field("pre_order_hari", "Pre Order - Hari", G_HARGA, numeric=True,
+          hint="Wajib bila Pre Order aktif", width=16),
+
+    # --- Pengiriman: bagian ini hanya muncul untuk kategori bertipe Barang.
+    Field("berat_gram", "Berat Produk (gram)", G_KIRIM, numeric=True,
+          only_for=(TIPE_BARANG,),
+          hint="Berat setelah dikemas. 1 kg = 1000 gram", width=20),
+    Field("panjang_cm", "Panjang (cm)", G_KIRIM, numeric=True,
+          only_for=(TIPE_BARANG,), width=14),
+    Field("lebar_cm", "Lebar (cm)", G_KIRIM, numeric=True,
+          only_for=(TIPE_BARANG,), width=14),
+    Field("tinggi_cm", "Tinggi (cm)", G_KIRIM, numeric=True,
+          only_for=(TIPE_BARANG,), width=14),
+    Field("ongkir", "Atur Ongkir Produk", G_KIRIM, options=ref.OPSI_ONGKIR,
+          only_for=(TIPE_BARANG,),
+          hint="Kosong berarti mengikuti Pengaturan Pengiriman toko", width=20),
+)
+
+
+def attribute_fields(slots: int = JUMLAH_SLOT_ATRIBUT) -> tuple[Field, ...]:
+    """Pasangan Atribut/Nilai untuk Spesifikasi Produk > Informasi Utama."""
+    out: list[Field] = []
+    for i in range(1, slots + 1):
+        hint = (
+            "Tulis nama atribut persis seperti di form, mis. Satuan Pengukuran"
+            if i == 1 else ""
+        )
+        out.append(Field(f"atribut_{i}_nama", f"Atribut {i}", G_ATRIBUT,
+                         hint=hint, width=26))
+        out.append(Field(f"atribut_{i}_nilai", f"Nilai {i}", G_ATRIBUT, width=26))
+    return tuple(out)
+
+
+def attachment_fields(slots: int = JUMLAH_SLOT_LAMPIRAN) -> tuple[Field, ...]:
+    """Pasangan nama dokumen dan path berkas PDF-nya."""
+    out: list[Field] = []
+    for i in range(1, slots + 1):
+        hint = (
+            "Nama dokumen persis seperti di bagian Lampiran, mis. Sertifikat Standar"
+            if i == 1 else ""
+        )
+        out.append(Field(f"dokumen_{i}_nama", f"Dokumen {i}", G_LAMPIRAN,
+                         hint=hint, width=30))
+        out.append(Field(f"dokumen_{i}_berkas", f"Berkas {i}", G_LAMPIRAN,
+                         file_ext=DOKUMEN_EXT, max_mb=BATAS_DOKUMEN_MB,
+                         hint="Path berkas .pdf" if i == 1 else "", width=34))
+    return tuple(out)
+
+
+def all_fields(
+    slots: int = JUMLAH_SLOT_ATRIBUT, lampiran: int = JUMLAH_SLOT_LAMPIRAN
+) -> tuple[Field, ...]:
+    return CORE_FIELDS + attribute_fields(slots) + attachment_fields(lampiran)
+
+
+def by_key(fields: tuple[Field, ...] = ()) -> dict[str, Field]:
+    return {f.key: f for f in (fields or all_fields())}
+
+
+def split_category(value: str) -> tuple[str, str, str]:
+    """'A > B > C' -> ('A', 'B', 'C'). Bagian yang kurang jadi string kosong."""
+    bagian = [b.strip() for b in str(value or "").split(">")]
+    bagian += [""] * (3 - len(bagian))
+    return bagian[0], bagian[1], bagian[2]
+
+
+def join_category(*bagian: str) -> str:
+    return PEMISAH_KATEGORI.join(b for b in bagian if b)
+
+
+def _pairs(row: dict, prefix: str, kedua: str, slots: int) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for i in range(1, slots + 1):
+        nama = str(row.get(f"{prefix}_{i}_nama", "") or "").strip()
+        nilai = str(row.get(f"{prefix}_{i}_{kedua}", "") or "").strip()
+        if nama or nilai:
+            out.append((nama, nilai))
+    return out
+
+
+def attribute_pairs(row: dict, slots: int = JUMLAH_SLOT_ATRIBUT) -> dict[str, str]:
+    return {n: v for n, v in _pairs(row, "atribut", "nilai", slots) if n}
+
+
+def attachment_pairs(row: dict, slots: int = JUMLAH_SLOT_LAMPIRAN) -> dict[str, str]:
+    return {n: v for n, v in _pairs(row, "dokumen", "berkas", slots) if n}
+
+
+def incomplete_pairs(row: dict) -> list[tuple[str, str, str]]:
+    """Slot yang hanya terisi separuh -- (jenis, nama, nilai)."""
+    out = []
+    for nama, nilai in _pairs(row, "atribut", "nilai", JUMLAH_SLOT_ATRIBUT):
+        if not nama or not nilai:
+            out.append(("atribut", nama, nilai))
+    for nama, nilai in _pairs(row, "dokumen", "berkas", JUMLAH_SLOT_LAMPIRAN):
+        if not nama or not nilai:
+            out.append(("dokumen", nama, nilai))
+    return out
+
+
+__all__ = [
+    "CORE_FIELDS",
+    "DOKUMEN_EXT",
+    "FOTO_EXT",
+    "Field",
+    "JUMLAH_SLOT_ATRIBUT",
+    "JUMLAH_SLOT_LAMPIRAN",
+    "PEMISAH_KATEGORI",
+    "TIPE_BARANG",
+    "TIPE_DIGITAL",
+    "TIPE_JASA",
+    "TIPE_PRODUK",
+    "VIDEO_EXT",
+    "all_fields",
+    "attachment_fields",
+    "attachment_pairs",
+    "attribute_fields",
+    "attribute_pairs",
+    "by_key",
+    "incomplete_pairs",
+    "join_category",
+    "split_category",
+]

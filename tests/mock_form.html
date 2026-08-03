@@ -1,0 +1,235 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tiruan form Tambah Produk</title>
+<!--
+  Meniru struktur form penyedia.inaproc.id/products/add: id, name, placeholder,
+  dan perilaku dropdown ala react-select. Dipakai untuk menguji ProductFormFiller
+  tanpa menyentuh portal sungguhan.
+-->
+<style>
+  body { font: 14px system-ui; margin: 24px; max-width: 900px }
+  .baris { display: flex; gap: 12px; align-items: center; margin: 10px 0 }
+  .baris > label { width: 260px }
+  input[type=text], textarea { padding: 6px; width: 320px }
+  .menu { border: 1px solid #ccc; position: absolute; background: #fff; z-index: 9 }
+  .option { padding: 6px 12px; cursor: pointer }
+  .option:hover { background: #eef }
+  .kolom { display: inline-block; vertical-align: top; min-width: 220px }
+  h3 { margin-top: 28px; border-top: 1px solid #ddd; padding-top: 12px }
+</style>
+
+<h2>Tambah Produk</h2>
+
+<div class="baris">
+  <label>Kategori</label>
+  <input type="text" placeholder="Pilih Kategori" id="kategori" autocomplete="off">
+</div>
+<div id="kategori-menu" class="menu" hidden></div>
+<div id="tipe-info"></div>
+
+<h3>Informasi Produk</h3>
+<div class="baris"><label>Nama Produk</label>
+  <input type="text" id="form-product-name-input" name="name" placeholder="Contoh: Bangku Kantor"></div>
+<div class="baris"><label>Deskripsi</label>
+  <textarea name="description" placeholder="Contoh: Kursi kantor"></textarea></div>
+<div class="baris"><label>Foto</label>
+  <input type="file" id="product-image-input-0"><input type="file" id="product-image-input-1">
+  <input type="file" id="product-image-input-2"><input type="file" id="product-image-input-3">
+  <input type="file" id="product-image-input-4"></div>
+<div class="baris"><label>Video</label><input type="file" id="videoInput" name="video"></div>
+<div class="baris"><label>URL Video Produk</label>
+  <input type="text" id="form-product-video-url-input" name="videoUrl"></div>
+
+<h3>KBKI &amp; PDN</h3>
+<div class="baris"><label>Kode KBKI</label><span data-select="kbki"></span></div>
+<div class="baris"><label>Klasifikasi Produk</label><span data-select="klasifikasi"></span></div>
+<div class="baris"><label>Lokasi Produksi</label><span data-select="lokasi"></span></div>
+<div class="baris"><label>Tenaga Kerja dalam Proses Produksi</label><span data-select="tenaga"></span></div>
+<div class="baris"><label>Bahan Baku dalam Proses Produksi</label><span data-select="bahan"></span></div>
+
+<h3>Pajak &amp; Saklar</h3>
+<div class="baris"><label>PPN</label><span data-select="ppn" data-id="react-select-ppnPercentage-select-input"></span></div>
+<div class="baris"><label>Merek</label><input type="checkbox" id="form-product-brand-isActive-switch" name="brand.isActive"></div>
+<div class="baris"><label>Sertifikat SNI</label><input type="checkbox" id="form-product-sni-switch" name="sni.isActive"></div>
+<div class="baris"><label>Kuantitas Desimal</label><input type="checkbox" id="form-product-decimal-qty-switch" name="hasDecimalQuantity"></div>
+<div class="baris"><label>Pre Order</label><input type="checkbox" id="form-product-preorder-isActive-switch" name="preOrder.isActive"></div>
+
+<h3>Harga &amp; Stok</h3>
+<div class="baris"><label>Minimum Pembelian</label><input type="text" id="form-product-min-purchase-input"></div>
+<div class="baris"><label>Harga Produk</label>
+  <input type="text" id="form-product-price-input" name="priceAndVariantField.variants.0.price" placeholder="Masukkan harga"></div>
+<div class="baris"><label>Jumlah Stok</label>
+  <input type="text" id="stockUnit-value-input" name="priceAndVariantField.variants.0.stock"></div>
+<div class="baris"><label>Satuan Produk</label><span data-select="satuan"></span></div>
+
+<h3>Spesifikasi Produk — Informasi Utama</h3>
+<div id="spesifikasi"></div>
+
+<h3>Lampiran</h3>
+<div id="lampiran"></div>
+
+<h3></h3>
+<button type="button" id="btn-draf">Simpan Draf Produk</button>
+<button type="button" id="btn-simpan">Simpan</button>
+<div id="hasil"></div>
+
+<script>
+const POHON = {
+  "Bidang Bina Marga": {
+    "Divisi 3 Pekerjaan Tanah dan Geosintetik": ["3.1 Galian", "3.2 Timbunan"],
+  },
+  "Peralatan Kantor": { "Furnitur Kantor": ["Meja Kerja"] },
+};
+const TIPE = { "Bidang Bina Marga": "Jasa", "Peralatan Kantor": "Barang" };
+
+const ATRIBUT = {
+  "3.1 Galian": ["Satuan Pengukuran", "Kode Produk", "Lingkup Kegiatan",
+                 "Lokasi Layanan (Kecamatan)"],
+  "3.2 Timbunan": ["Satuan Pengukuran", "Kode Produk"],
+  "Meja Kerja": ["Satuan Pengukuran", "Bahan Utama"],
+};
+const DOKUMEN = {
+  "3.1 Galian": ["Sertifikat Badan Usaha (SBU) Konstruksi", "Sertifikat Standar"],
+  "3.2 Timbunan": ["Sertifikat Standar"],
+  "Meja Kerja": ["Sertifikat Standar"],
+};
+const PILIHAN = {
+  kbki: ["54310 - Jasa pembongkaran", "54330 - Jasa penggalian dan pemindahan tanah"],
+  klasifikasi: ["Lokal", "Import"],
+  lokasi: ["Diproduksi di seluruh Indonesia", "Diproduksi sebagian di Indonesia"],
+  tenaga: ["Dibuat oleh seluruh tenaga kerja Indonesia di dalam negeri",
+           "Sebagian tenaga kerja Indonesia"],
+  bahan: ["Seluruh bahan baku dalam negeri", "Sebagian bahan baku dalam negeri"],
+  ppn: ["0%", "12%"],
+  satuan: ["Meter", "Unit", "Kilogram"],
+};
+
+// --- dropdown ala react-select ---------------------------------------------
+document.querySelectorAll("[data-select]").forEach(host => {
+  const kunci = host.dataset.select;
+  const kotak = document.createElement("input");
+  kotak.type = "text";
+  kotak.setAttribute("role", "combobox");
+  if (host.dataset.id) kotak.id = host.dataset.id;
+  kotak.dataset.nilai = "";
+  host.appendChild(kotak);
+
+  const menu = document.createElement("div");
+  menu.className = "menu";
+  menu.hidden = true;
+  host.appendChild(menu);
+
+  const gambar = () => {
+    const ketikan = kotak.value.toLowerCase();
+    menu.innerHTML = "";
+    PILIHAN[kunci].filter(o => o.toLowerCase().includes(ketikan)).forEach(o => {
+      const item = document.createElement("div");
+      item.className = "option";
+      item.setAttribute("role", "option");
+      item.textContent = o;
+      item.onclick = () => {
+        kotak.value = o; kotak.dataset.nilai = o; menu.hidden = true;
+      };
+      menu.appendChild(item);
+    });
+    menu.hidden = false;
+  };
+  kotak.addEventListener("focus", gambar);
+  kotak.addEventListener("input", gambar);
+});
+
+// --- pemilih kategori bertingkat -------------------------------------------
+const kotakKategori = document.getElementById("kategori");
+const menuKategori = document.getElementById("kategori-menu");
+let terpilih = { satu: null, dua: null };
+let sudahAdaKategori = false;
+
+function gambarKategori() {
+  const ketikan = kotakKategori.value.toLowerCase();
+  menuKategori.innerHTML = "";
+  const kolom = (isi, saatKlik) => {
+    const wadah = document.createElement("div");
+    wadah.className = "kolom";
+    isi.forEach(t => {
+      const item = document.createElement("div");
+      item.className = "option";
+      item.setAttribute("role", "option");
+      item.textContent = t;
+      item.onclick = () => saatKlik(t);
+      wadah.appendChild(item);
+    });
+    menuKategori.appendChild(wadah);
+  };
+
+  const cocok = n => !ketikan || JSON.stringify(POHON[n]).toLowerCase().includes(ketikan)
+                     || n.toLowerCase().includes(ketikan);
+  kolom(Object.keys(POHON).filter(cocok), n => { terpilih = { satu: n, dua: null }; gambarKategori(); });
+  if (terpilih.satu)
+    kolom(Object.keys(POHON[terpilih.satu]), n => { terpilih.dua = n; gambarKategori(); });
+  if (terpilih.satu && terpilih.dua)
+    kolom(POHON[terpilih.satu][terpilih.dua], n => pilihKategori(n));
+  menuKategori.hidden = false;
+}
+
+function pilihKategori(level3) {
+  const terapkan = () => {
+    kotakKategori.value = `${terpilih.satu} > ${terpilih.dua} > ${level3}`;
+    kotakKategori.dataset.level3 = level3;
+    menuKategori.hidden = true;
+    document.getElementById("tipe-info").textContent =
+      `Kategori ini termasuk jenis Produk ${TIPE[terpilih.satu]}`;
+    gambarSpesifikasi(level3);
+    sudahAdaKategori = true;
+    document.getElementById("konfirmasi")?.remove();
+  };
+  if (!sudahAdaKategori) return terapkan();
+
+  const dialog = document.createElement("div");
+  dialog.id = "konfirmasi";
+  dialog.innerHTML = "<p>Konfirmasi Perubahan Kategori Produk</p>";
+  const ya = document.createElement("button");
+  ya.type = "button"; ya.textContent = "Ya, Ubah"; ya.onclick = terapkan;
+  dialog.appendChild(ya);
+  document.body.appendChild(dialog);
+}
+
+function gambarSpesifikasi(level3) {
+  const spek = document.getElementById("spesifikasi");
+  spek.innerHTML = "";
+  (ATRIBUT[level3] || []).forEach((label, i) => {
+    const baris = document.createElement("div");
+    baris.className = "baris";
+    baris.innerHTML = `<label>${label}</label>`;
+    const kotak = document.createElement("input");
+    kotak.type = "text";
+    kotak.name = `productInformations.mainInformations.${i}.value`;
+    kotak.id = `form-product-productInformations-mainInformations-${i}-input`;
+    kotak.placeholder = `Masukkan ${label}`;
+    baris.appendChild(kotak);
+    spek.appendChild(baris);
+  });
+
+  const lampiran = document.getElementById("lampiran");
+  lampiran.innerHTML = "";
+  (DOKUMEN[level3] || []).forEach(label => {
+    const blok = document.createElement("div");
+    blok.innerHTML = `<div>${label}</div><div>Pilih atau tarik dokumen di sini</div>
+                      <div>Format .pdf (max. 10 mb)</div>`;
+    const kotak = document.createElement("input");
+    kotak.type = "file";
+    kotak.id = "document-field-input";
+    blok.appendChild(kotak);
+    lampiran.appendChild(blok);
+  });
+}
+
+kotakKategori.addEventListener("focus", gambarKategori);
+kotakKategori.addEventListener("input", gambarKategori);
+
+const catat = nama => () => {
+  document.getElementById("hasil").textContent = `DIKLIK: ${nama}`;
+  history.replaceState({}, "", "/products/abc12345def");
+};
+document.getElementById("btn-draf").onclick = catat("Simpan Draf Produk");
+document.getElementById("btn-simpan").onclick = catat("Simpan");
+</script>
