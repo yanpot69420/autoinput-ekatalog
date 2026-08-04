@@ -28,22 +28,7 @@ lembar.
 | 3 | Jalankan semua, lanjutkan sisanya, berhenti di tengah | Belum |
 | 4 | Varian, harga grosir, TKDN/SNI/Merek | Belum |
 
-## Menjalankan ke portal
-
-Aplikasi tidak pernah menyimpan kata sandi. Kamu menjalankan Chrome dengan port
-debug terbuka, login sendiri, lalu aplikasi menempel ke sesi itu:
-
-```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/.inaproc-chrome"
-```
-
-Profil terpisah dipakai supaya Chrome sehari-harimu tidak perlu ditutup. Login
-sekali di jendela itu; sesinya bertahan.
-
-Lalu di aplikasi: **Uji koneksi browser** → pilih satu baris → **Jalankan baris
-ini**.
-
-### Tiga tingkat tindakan
+## Tiga tingkat tindakan
 
 Pilihan *Setelah terisi* menentukan sejauh mana aplikasi boleh bertindak:
 
@@ -61,10 +46,35 @@ untuk atribut atau dokumen yang tidak ada di kategori tersebut.
 
 ## Menjalankan
 
+Siapkan sekali:
+
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -e .
+python3 -m venv .venv && .venv/bin/pip install -e . playwright
+```
+
+Lalu buat pintasan yang bisa diklik dua kali dari Finder atau Dock:
+
+```bash
+./scripts/buat-shortcut.sh
+```
+
+Atau jalankan langsung dari terminal:
+
+```bash
 .venv/bin/inaproc-autoinput
 ```
+
+### Menyambung ke portal
+
+Aplikasi tidak pernah menyimpan kata sandi. Klik **Buka Chrome portal** di
+jendela aplikasi — Chrome terbuka dengan port debug dan profil terpisah di
+`~/.inaproc-chrome`, jadi Chrome sehari-harimu tidak perlu ditutup. Login
+sendiri di jendela itu, sekali saja, lalu klik **Uji koneksi browser**.
+
+Chrome selalu dibuka dengan alamat halaman tambah produk. Ini bukan kenyamanan
+belaka: Chrome yang dibuka tanpa alamat hanya menampilkan tab baru, dan tab itu
+tidak muncul sebagai target di `/json/list` — port debug hidup tapi tidak ada
+yang bisa dikendalikan, dengan pesan galat yang menyesatkan.
 
 Alur pemakaian:
 
@@ -128,7 +138,7 @@ Dengan daftar itu aplikasi:
 - menempelkan seluruh daftar kategori sebagai sheet **Daftar Kategori** di
   template kosong, supaya penyedia menyalin nama, bukan mengarang.
 
-UUID-nya nanti dipakai Tahap 2 untuk memilih kategori langsung di form.
+UUID-nya dipakai saat mengisi form untuk memastikan kategori yang terpilih benar.
 
 ## Isi template
 

@@ -14,3 +14,7 @@ templates/
 config/
 *.xlsx
 *.status.json
+
+# Pintasan .app memuat path absolut mesin pembuatnya.
+# Buat sendiri dengan: ./scripts/buat-shortcut.sh
+*.app/

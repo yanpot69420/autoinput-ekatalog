@@ -27,7 +27,8 @@ from PySide6.QtWidgets import (
 from .. import state, workbook
 from ..categories import Catalog
 from ..model import Status, rows_from_records
-from ..runner import CDP_DEFAULT, Mode
+from .. import chrome
+from ..runner import CDP_DEFAULT, URL_TAMBAH, Mode
 from ..validation import validate
 from .table_model import COL_NAMA, COL_PESAN, ProductTableModel
 from .worker import RunWorker
@@ -111,7 +112,15 @@ class MainWindow(QMainWindow):
         uji.clicked.connect(self.test_connection)
         self._btn_uji = uji
 
+        chrome_btn = QPushButton("Buka Chrome portal")
+        chrome_btn.setToolTip(
+            "Buka Chrome dengan port debug dan profil terpisah, lalu login "
+            "sendiri di jendela itu"
+        )
+        chrome_btn.clicked.connect(self.open_chrome)
+
         bar.addWidget(self._file_label, stretch=1)
+        bar.addWidget(chrome_btn)
         bar.addWidget(uji)
         bar.addWidget(kategori)
         bar.addWidget(muat_ulang)
@@ -218,6 +227,15 @@ class MainWindow(QMainWindow):
             f"Kategori: {dilayani['level3']} dari {semua['level3']} dipakai "
             f"({dilayani['level1']} bidang, diunduh {waktu})"
         )
+
+    def open_chrome(self) -> None:
+        """Buka Chrome berport debug supaya aplikasi bisa menempel ke sesinya."""
+        berhasil, pesan = chrome.launch(url=URL_TAMBAH)
+        if berhasil:
+            QMessageBox.information(self, "Chrome", pesan)
+            self.statusBar().showMessage(pesan, 10000)
+        else:
+            QMessageBox.warning(self, "Chrome tidak bisa dibuka", pesan)
 
     def create_template(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
