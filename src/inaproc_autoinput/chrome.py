@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -85,6 +86,60 @@ def is_listening(port: int = PORT_DEFAULT, timeout: float = 1.5) -> str:
     return payload.get("Browser", "Chrome")
 
 
+def tutup(port: int = PORT_DEFAULT, tunggu: float = 12.0) -> tuple[bool, str]:
+    """Tutup Chrome berport debug lewat protokolnya sendiri.
+
+    Ditutup baik-baik, bukan diputus paksa. Chrome menuliskan cookie dan sesi ke
+    profil saat keluar normal, dan itulah yang membuat login bertahan setelah
+    dijalankan lagi -- dimatikan paksa, yang tertulis belum tentu lengkap.
+
+    Perintahnya memutus sambungannya sendiri, jadi galat setelah dikirim justru
+    tanda berhasil. Yang menentukan cuma satu: port debugnya berhenti menjawab.
+    """
+    if not is_listening(port):
+        return True, "Chrome memang sedang tidak berjalan."
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False, ("Playwright belum terpasang, jadi Chrome tidak bisa "
+                       "ditutup dari sini. Tutup jendelanya sendiri.")
+
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.connect_over_cdp(f"http://localhost:{port}")
+            try:
+                browser.new_browser_cdp_session().send("Browser.close")
+            except Exception:  # noqa: BLE001 -- sambungan putus saat Chrome keluar
+                pass
+    except Exception:  # noqa: BLE001 -- sama, dan bukan penentu berhasil
+        pass
+
+    batas = time.monotonic() + tunggu
+    while time.monotonic() < batas:
+        if not is_listening(port, timeout=0.5):
+            return True, "Chrome ditutup."
+        time.sleep(0.3)
+    return False, ("Chrome belum juga menutup. Tutup jendelanya sendiri, lalu "
+                   "klik 'Buka Chrome portal'.")
+
+
+def mulai_ulang(port: int = PORT_DEFAULT, url: str = URL_AWAL) -> tuple[bool, str]:
+    """Tutup lalu buka lagi Chrome portal.
+
+    Chrome yang sudah lama hidup melambat cukup jauh: rangkaian uji yang sama
+    berjalan 100 detik di Chrome yang dipakai berjam-jam, 29 detik setelah
+    dijalankan ulang. Sesi login bertahan karena profilnya permanen.
+    """
+    berhasil, pesan = tutup(port)
+    if not berhasil:
+        return False, pesan
+    berhasil, pesan_buka = launch(port, url)
+    if not berhasil:
+        return False, pesan_buka
+    return True, "Chrome dijalankan ulang. Sesi loginmu tetap ada."
+
+
 def launch(port: int = PORT_DEFAULT, url: str = URL_AWAL) -> tuple[bool, str]:
     """Buka Chrome berport debug. Mengembalikan (berhasil, pesan).
 
@@ -146,4 +201,6 @@ __all__ = [
     "find_chrome",
     "is_listening",
     "launch",
+    "mulai_ulang",
+    "tutup",
 ]

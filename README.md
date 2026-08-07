@@ -170,8 +170,13 @@ jendela Chrome itu.
 **Chrome yang sudah lama hidup.** Terukur di rangkaian uji yang sama: 100 detik
 di Chrome yang sudah dipakai berjam-jam, 29 detik setelah Chrome dijalankan
 ulang — kode identik, dua kali pengukuran masing-masing. Kalau pengisian mulai
-terasa berat, tutup jendela Chrome portal lalu klik **Buka Chrome portal** lagi.
-Sesi login bertahan karena profilnya permanen.
+terasa berat, klik **Mulai ulang Chrome**. Butuh sekitar satu detik, dan sesi
+loginmu tetap ada karena profilnya permanen.
+
+Chrome ditutup lewat protokolnya sendiri (`Browser.close`), bukan dimatikan
+paksa. Bedanya penting: Chrome menuliskan cookie dan sesi ke profil saat keluar
+normal, sedangkan kalau dibunuh yang tertulis belum tentu lengkap — dan itu
+persis yang membuat login hilang.
 
 Alur pemakaian:
 
