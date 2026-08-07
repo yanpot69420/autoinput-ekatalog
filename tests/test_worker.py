@@ -143,3 +143,35 @@ def test_worker_membakukan_mode_berbentuk_str():
                           ("simpan_draf", Mode.SIMPAN_DRAF),
                           ("simpan", Mode.SIMPAN)):
         assert RunWorker(None, teks, "http://localhost:9222")._mode is harapan
+
+
+def test_worker_memperingatkan_chrome_yang_melambat(monkeypatch):
+    """Diperiksa sebelum antrean jalan, bukan sesudah.
+
+    Mengisi berpuluh baris di Chrome yang melambat sembilan kali lipat membuang
+    waktu yang tidak bisa diambil kembali — dan dari luar terlihat seperti
+    portal yang berat, bukan browser yang perlu dijalankan ulang.
+    """
+    from inaproc_autoinput.runner import SEHAT_JS
+    from inaproc_autoinput.ui.worker import RunWorker
+
+    class RunnerLambat:
+        def kecepatan(self):
+            return 871_051, 16.7
+
+    class RunnerSehat:
+        def kecepatan(self):
+            return SEHAT_JS, 8.3
+
+    class RunnerRusak:
+        def kecepatan(self):
+            raise RuntimeError("tab hilang")
+
+    w = RunWorker(None, "isi_saja", "http://localhost:9222")
+    pesan = w._periksa_kecepatan(RunnerLambat())
+    assert "Chrome sedang melambat sendiri" in pesan
+    assert "buka_chrome --mulai-ulang" in pesan
+
+    assert w._periksa_kecepatan(RunnerSehat()) == ""
+    # Pemeriksaan bantu tidak boleh menggagalkan antrean.
+    assert w._periksa_kecepatan(RunnerRusak()) == ""

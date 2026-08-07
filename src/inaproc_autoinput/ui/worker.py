@@ -14,6 +14,8 @@ from ..runner import (
     Mode,
     Ringkasan,
     RunnerError,
+    chrome_melambat,
+    pesan_chrome_lambat,
     pesan_penghalang,
 )
 
@@ -84,12 +86,34 @@ class RunWorker(QThread):
                         True, "Tersambung. Belum ada tab portal terbuka — "
                               "tabnya dibuat saat baris pertama dijalankan."))
                     return
+                lambat = self._periksa_kecepatan(runner)
                 self.koneksi.emit(Hasil(
-                    True, f"Tersambung. Tab portal: {runner.page.url}"))
+                    True, f"Tersambung. Tab portal: {runner.page.url}"
+                          + (f"\n\n{lambat}" if lambat else "")))
                 return
+            # Sebelum antrean jalan, bukan sesudah: mengisi berpuluh baris di
+            # Chrome yang melambat sembilan kali lipat membuang waktu yang tidak
+            # bisa diambil kembali.
+            lambat = self._periksa_kecepatan(runner)
+            if lambat:
+                self.langkah.emit(lambat.splitlines()[0])
             self.tuntas.emit(self._kerjakan(runner))
         finally:
             runner.close()
+
+    def _periksa_kecepatan(self, runner: BrowserRunner) -> str:
+        """Peringatan bila Chrome-nya sendiri sedang melambat, atau string kosong.
+
+        Chrome kadang meninggalkan proses perender yang terus berputar tanpa
+        halaman, dan seluruh browser ikut melambat. Dari luar itu terlihat
+        seperti portal yang berat atau aplikasi yang buruk, jadi lebih baik
+        disebutkan daripada dibiarkan ditebak.
+        """
+        try:
+            js, frame = runner.kecepatan()
+        except Exception:  # noqa: BLE001 -- pemeriksaan bantu, tidak boleh menggagalkan
+            return ""
+        return pesan_chrome_lambat(js, frame) if chrome_melambat(js, frame) else ""
 
     def _gagal_menyambung(self, pesan: str) -> None:
         """Tanpa browser tidak ada baris yang bisa dikerjakan sama sekali."""

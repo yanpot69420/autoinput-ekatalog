@@ -71,6 +71,49 @@ TIMEOUT_SIMPAN = 6_000
 
 POLA_PRODUK = re.compile(r"/products/[0-9a-f-]{8,}")
 
+# Kecepatan perender Chrome saat sehat, diukur pada halaman kosong -- tanpa
+# jaringan dan tanpa portal, jadi yang tersisa cuma Chrome-nya sendiri.
+SEHAT_JS = 8_100_000     # ribuan operasi dalam 300 ms
+SEHAT_FRAME = 8.3        # milidetik per frame
+# Chrome kadang meninggalkan proses perender yatim yang terus berputar tanpa
+# halaman apa pun -- terukur membakar 72% CPU dengan satu tab kosong, dan
+# pernah menjatuhkan kecepatan JS sampai sepersembilan. Yang melambat semua
+# situs, bukan cuma portal, jadi gampang dikira portalnya yang berat.
+AMBANG_JS = SEHAT_JS * 0.6
+AMBANG_FRAME = SEHAT_FRAME * 1.7
+
+_UKUR_PERENDER = """() => {
+  let n = 0, t = performance.now();
+  while (performance.now() - t < 300) { for (let i = 0; i < 1000; i++) n += Math.sqrt(i); }
+  const js = Math.round(n / 1000 * (400 / 300));
+  return new Promise(res => {
+    const d = []; let a = performance.now(); const habis = a + 1000;
+    (function tick(now) { d.push(now - a); a = now;
+      now < habis ? requestAnimationFrame(tick) : res({js, frame: d}); })(a);
+  });
+}"""
+
+
+def chrome_melambat(js: int, frame: float) -> bool:
+    """Apakah Chrome sendiri yang melambat, terlepas dari portalnya.
+
+    Salah satu saja sudah cukup: pada kejadian nyata keduanya turun bersamaan,
+    tapi menuntut keduanya berarti melewatkan gejala yang baru mulai.
+    """
+    return js < AMBANG_JS or frame > AMBANG_FRAME
+
+
+def pesan_chrome_lambat(js: int, frame: float) -> str:
+    return (
+        f"Chrome sedang melambat sendiri: kecepatan JS {js:,} (sehat "
+        f"±{SEHAT_JS:,}), {frame:.1f} ms per frame (sehat ±{SEHAT_FRAME}).\n\n"
+        "Penyebabnya proses perender yang tersangkut dan terus berputar tanpa "
+        "halaman. Yang melambat semua situs, bukan cuma portal, dan pengisian "
+        "akan terasa berat sampai Chrome dijalankan ulang:\n\n"
+        "  python -m inaproc_autoinput.buka_chrome --mulai-ulang\n\n"
+        "Sesi loginmu tetap ada."
+    )
+
 # Menandai elemen dengan id acak lalu mengembalikan selektornya. Dipakai karena
 # id asli react-select berubah tiap render, jadi tidak bisa ditulis tetap.
 _TANDAI = """const tandai = el => {
@@ -798,6 +841,19 @@ class BrowserRunner:
 
     def penghalang(self) -> str:
         return penghalang(self.page) if self.page else ""
+
+    def kecepatan(self) -> tuple[int, float]:
+        """Kecepatan perender Chrome, diukur di tab yang sedang dipakai.
+
+        Dipanggil sekali per antrean. Ongkosnya sekitar satu setengah detik,
+        jauh lebih murah daripada mengisi berpuluh baris di Chrome yang sedang
+        melambat sembilan kali lipat tanpa ada yang tahu sebabnya.
+        """
+        halaman = self.siapkan_halaman()
+        hasil = halaman.evaluate(_UKUR_PERENDER)
+        frame = sorted(x for x in hasil["frame"][2:] if x < 3000)
+        tengah = frame[len(frame) // 2] if frame else float("nan")
+        return hasil["js"], tengah
 
     def jalankan(self, data: dict, mode: Mode = Mode.ISI_SAJA, catatan=None,
                  assets: Assets | None = None, batal=None) -> Hasil:

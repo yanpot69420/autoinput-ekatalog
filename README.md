@@ -258,7 +258,11 @@ tetap ada karena profilnya permanen:
 .venv/bin/python -m inaproc_autoinput.buka_chrome --mulai-ulang
 ```
 
-`periksa_portal` mengenali kondisi ini sendiri dan menyebutkan perintahnya.
+Aplikasi mengenali kondisi ini sendiri: kecepatan Chrome diukur saat **Uji
+koneksi browser** dan sekali lagi sebelum antrean jalan. Kalau melambat,
+peringatannya muncul berikut perintah di atas — kamu tidak perlu menebak apakah
+yang berat portalnya, aplikasinya, atau browsernya. `periksa_portal` memberi
+angka lengkapnya.
 
 Chrome ditutup lewat protokolnya sendiri (`Browser.close`), bukan dimatikan
 paksa. Bedanya penting: Chrome menuliskan cookie dan sesi ke profil saat keluar

@@ -21,44 +21,14 @@ import statistics as st
 import time
 
 from . import chrome
-from .runner import CDP_DEFAULT, SEL_KATEGORI, URL_TAMBAH, penghalang
+from .runner import (AMBANG_FRAME, AMBANG_JS, CDP_DEFAULT, SEHAT_FRAME,
+                     SEHAT_JS, SEL_KATEGORI, URL_TAMBAH, _UKUR_PERENDER,
+                     chrome_melambat, penghalang)
 
 JUMLAH = 3
 # Di atas ini portalnya memang sedang berat, bukan perasaan. Diambil dari
 # pengukuran saat portal sehat: form siap dalam 0,8 detik.
 BATAS_LAMBAT = 5.0
-
-# Kecepatan perender Chrome saat sehat, diukur pada halaman kosong -- tanpa
-# jaringan dan tanpa portal, jadi yang tersisa cuma Chrome-nya sendiri.
-SEHAT_JS = 8_100_000     # ribuan operasi dalam 400 ms
-SEHAT_FRAME = 8.3        # milidetik per frame
-# Chrome kadang meninggalkan proses perender yatim yang terus berputar tanpa
-# halaman apa pun -- terukur membakar 72% CPU dengan satu tab about:blank.
-# Akibatnya seluruh Chrome melambat dua sampai tiga kali lipat, di situs mana
-# pun. Di bawah/di atas ambang ini, yang bermasalah Chrome-nya, bukan portal.
-AMBANG_JS = SEHAT_JS * 0.6
-AMBANG_FRAME = SEHAT_FRAME * 1.7
-
-_UKUR_PERENDER = """() => {
-  let n = 0, t = performance.now();
-  while (performance.now() - t < 400) { for (let i = 0; i < 1000; i++) n += Math.sqrt(i); }
-  const js = Math.round(n / 1000);
-  return new Promise(res => {
-    const d = []; let a = performance.now(); const habis = a + 1500;
-    (function tick(now) { d.push(now - a); a = now;
-      now < habis ? requestAnimationFrame(tick) : res({js, frame: d}); })(a);
-  });
-}"""
-
-
-def chrome_melambat(js: int, frame: float) -> bool:
-    """Apakah Chrome sendiri yang melambat, terlepas dari portalnya.
-
-    Salah satu saja sudah cukup: pada kejadian nyata keduanya turun bersamaan,
-    tapi menuntut keduanya berarti melewatkan gejala yang baru mulai.
-    """
-    return js < AMBANG_JS or frame > AMBANG_FRAME
-
 
 def _ukur_perender(page) -> tuple[int, float]:
     """Kecepatan Chrome sendiri, diukur di halaman kosong.
