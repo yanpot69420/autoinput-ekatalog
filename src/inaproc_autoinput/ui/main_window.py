@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -279,8 +279,26 @@ class MainWindow(QMainWindow):
         if berhasil:
             QMessageBox.information(self, "Chrome", pesan)
             self.statusBar().showMessage(pesan, 10000)
+            self._periksa_setelah_chrome()
         else:
             QMessageBox.warning(self, "Chrome tidak bisa dibuka", pesan)
+
+    def _periksa_setelah_chrome(self, sisa: int = 40) -> None:
+        """Setelah Chrome terbuka, periksa sendiri keadaan halamannya.
+
+        Sesi yang sudah ditendang membuat portal menampilkan halaman rusak
+        berikut modal yang menelan semua klik dan ketikan. Dari kursi pengguna
+        itu terasa persis seperti Chrome yang lambat -- padahal perendernya
+        baik-baik saja dan yang mati cuma sesinya. Diberitahu di sini supaya
+        tidak ada yang mengejar masalah yang salah.
+
+        Ditunggu dengan pencacah, bukan jeda: Chrome butuh beberapa detik untuk
+        siap, dan menahan jendela selama itu justru menambah kesan membeku.
+        """
+        if chrome.is_listening():
+            self.test_connection()
+        elif sisa:
+            QTimer.singleShot(500, lambda: self._periksa_setelah_chrome(sisa - 1))
 
     def _ganti_profil(self, *_args) -> None:
         """Simpan pilihan profil, lalu jelaskan konsekuensinya sekali."""
@@ -324,6 +342,7 @@ class MainWindow(QMainWindow):
         if berhasil:
             QMessageBox.information(self, "Chrome", pesan)
             self.statusBar().showMessage(pesan, 10000)
+            self._periksa_setelah_chrome()
         else:
             QMessageBox.warning(self, "Chrome tidak bisa dimulai ulang", pesan)
 

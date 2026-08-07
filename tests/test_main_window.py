@@ -264,6 +264,10 @@ def test_pilihan_profil_chrome_tersimpan(jendela, monkeypatch, tmp_path):
     berkas = tmp_path / "chrome.json"
     monkeypatch.setattr(mw.chrome, "PILIHAN_PATH", berkas)
 
+    # Mulai dari terpisah apa pun isi konfigurasi nyata di mesin ini: kalau
+    # comboboxnya kebetulan sudah di posisi 1, setCurrentIndex(1) tidak
+    # memancarkan sinyal apa pun dan uji ini lolos tanpa menguji apa-apa.
+    jendela._profil.setCurrentIndex(0)
     jendela._profil.setCurrentIndex(1)
     assert mw.chrome.pakai_harian(berkas)
     assert mw.chrome.profil() == mw.chrome.PROFIL_HARIAN
@@ -278,3 +282,46 @@ def test_pilihan_profil_terkunci_saat_antrean_berjalan(jendela):
     assert not jendela._profil.isEnabled()
     jendela._set_sedang_jalan(False)
     assert jendela._profil.isEnabled()
+
+
+def test_setelah_buka_chrome_halaman_langsung_diperiksa(jendela, monkeypatch):
+    """Sesi mati terasa seperti lag; pengguna harus diberi tahu tanpa diminta."""
+    from inaproc_autoinput.ui import main_window as mw
+
+    diuji = []
+    monkeypatch.setattr(mw.chrome, "launch", lambda *a, **k: (True, "ok"))
+    monkeypatch.setattr(mw.chrome, "is_listening", lambda *a, **k: "Chrome/1")
+    monkeypatch.setattr(mw.QMessageBox, "information", lambda *a, **k: None)
+    monkeypatch.setattr(mw.MainWindow, "test_connection",
+                        lambda self: diuji.append(1))
+
+    jendela.open_chrome()
+    assert diuji == [1]
+
+
+def test_pemeriksaan_menunggu_chrome_siap_tanpa_menahan_jendela(jendela, monkeypatch):
+    """Chrome butuh beberapa detik; jendela tidak boleh ikut membeku."""
+    from inaproc_autoinput.ui import main_window as mw
+
+    dijadwalkan = []
+    monkeypatch.setattr(mw.chrome, "is_listening", lambda *a, **k: "")
+    monkeypatch.setattr(mw.QTimer, "singleShot",
+                        staticmethod(lambda ms, fn: dijadwalkan.append(ms)))
+    monkeypatch.setattr(mw.MainWindow, "test_connection",
+                        lambda self: pytest.fail("Chrome belum siap"))
+
+    jendela._periksa_setelah_chrome()
+    assert dijadwalkan == [500]
+
+
+def test_pemeriksaan_menyerah_setelah_cukup_lama(jendela, monkeypatch):
+    """Tanpa batas, jadwalnya berulang selamanya di jendela yang menganggur."""
+    from inaproc_autoinput.ui import main_window as mw
+
+    dijadwalkan = []
+    monkeypatch.setattr(mw.chrome, "is_listening", lambda *a, **k: "")
+    monkeypatch.setattr(mw.QTimer, "singleShot",
+                        staticmethod(lambda ms, fn: dijadwalkan.append(ms)))
+
+    jendela._periksa_setelah_chrome(sisa=0)
+    assert dijadwalkan == []
