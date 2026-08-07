@@ -313,3 +313,49 @@ def test_menekan_jalankan_baris_tidak_melempar_galat(jendela, monkeypatch):
     jendela.run_selected_row()
 
     assert dikirim and len(dikirim[0]) == 1
+
+
+# --- tata letak tidak boleh membuang tombol ---------------------------------
+
+
+def test_label_path_memendek_bukan_melebarkan_jendela(app):
+    """Path panjang dulu mendorong seluruh tombol keluar jendela.
+
+    QLabel biasa menuntut lebar sebesar teks utuhnya lewat minimumSizeHint, dan
+    tombol di sebelahnya terpotong diam-diam — tidak terlihat, tidak bisa
+    diklik, tanpa tanda apa pun.
+    """
+    from inaproc_autoinput.ui.main_window import LabelPendek
+
+    panjang = "/Users/mac/Workspace/autoinput-ekatalog/out/MC-Bronjong-Jembatan.xlsx"
+    label = LabelPendek()
+    label.setText(panjang)
+
+    assert label.minimumSizeHint().width() == 0
+    assert label.toolTip() == panjang        # utuhnya tetap terbaca
+
+    label.resize(240, 20)
+    label._perbarui()
+    assert label.text() != panjang and "…" in label.text()
+
+
+def test_jendela_muat_di_layar_sempit(jendela):
+    """Lebar minimum harus di bawah lebar laptop paling kecil yang lazim."""
+    assert jendela.minimumSizeHint().width() < 900
+
+
+def test_perkakas_memakai_toolbar_yang_punya_luapan(jendela):
+    """QToolBar memunculkan tombol luapan sendiri; baris tombol biasa tidak."""
+    from PySide6.QtWidgets import QPushButton, QToolBar
+
+    bar = jendela.findChildren(QToolBar)
+    assert bar, "perkakas harus berada di QToolBar"
+    teks = {b.text() for b in bar[0].findChildren(QPushButton)}
+    for wajib in ("Buka template terisi…", "Uji koneksi browser",
+                  "Buka Chrome portal"):
+        assert wajib in teks, wajib
+
+
+def test_ringkasan_tidak_mengunci_lebar_jendela(jendela):
+    jendela._summary.setText("11 baris · 3 sukses · 2 terisi · 1 gagal · 5 menunggu")
+    assert jendela._summary.minimumSizeHint().width() == 0

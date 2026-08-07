@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -16,11 +17,13 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStatusBar,
     QTableView,
     QTabWidget,
     QTextEdit,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
@@ -37,6 +40,67 @@ from .table_model import COL_NAMA, COL_PESAN, ProductTableModel
 from .worker import RunWorker
 
 JUDUL = "INAPROC Autoinput — Katalog Elektronik v6"
+
+
+class LabelPendek(QLabel):
+    """QLabel yang memendekkan teksnya sendiri, bukan memaksa jendela melebar.
+
+    QLabel biasa melaporkan lebar minimum sebesar teks utuhnya. Satu path file
+    yang panjang karena itu mendorong seluruh tombol di sebelahnya keluar
+    jendela -- tidak terlihat, tidak bisa diklik, dan tanpa tanda apa pun bahwa
+    ada yang hilang. Teks utuhnya tetap terbaca lewat tooltip.
+    """
+
+    def __init__(self, teks: str = "", parent=None):
+        super().__init__(teks, parent)
+        self._penuh = teks
+        # Preferred, bukan Ignored: minta selebar teksnya bila ruangnya ada,
+        # tapi rela menyempit sampai nol -- yang dijamin minimumSizeHint di
+        # bawah. Dengan Ignored, label ini malah tergencet jadi beberapa piksel
+        # saat berbagi baris dengan pengisi ruang.
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+
+    def setText(self, teks: str) -> None:  # noqa: N802 -- mengikuti Qt
+        self._penuh = teks or ""
+        self.setToolTip(self._penuh)
+        self._perbarui()
+
+    def teks_penuh(self) -> str:
+        return self._penuh
+
+    def sizeHint(self):  # noqa: N802 -- mengikuti Qt
+        """Lebar yang diinginkan dihitung dari teks utuh, bukan yang tampil.
+
+        QLabel menghitungnya dari teks yang sedang ditampilkan -- yang di sini
+        sudah dipendekkan. Hasilnya gelung: sekali menyempit, lebar yang diminta
+        ikut menyusut, dan labelnya tidak pernah melebar lagi walau ruangnya
+        kembali ada.
+        """
+        dasar = super().sizeHint()
+        dasar.setWidth(QFontMetrics(self.font()).horizontalAdvance(self._penuh) + 4)
+        return dasar
+
+    def minimumSizeHint(self):  # noqa: N802 -- mengikuti Qt
+        """Boleh menyempit sampai apa pun.
+
+        Tanpa ini, QLabel tetap menuntut selebar teksnya lewat minimumSizeHint
+        -- setelan size policy saja tidak cukup, dan jendela tetap tidak bisa
+        dipersempit di bawah panjang path.
+        """
+        dasar = super().minimumSizeHint()
+        dasar.setWidth(0)
+        return dasar
+
+    def resizeEvent(self, event):  # noqa: N802 -- mengikuti Qt
+        super().resizeEvent(event)
+        self._perbarui()
+
+    def _perbarui(self) -> None:
+        lebar = max(0, self.width() - 4)
+        # Dipotong di tengah: awal path menunjukkan foldernya, akhirnya
+        # menunjukkan nama berkasnya. Keduanya lebih berguna daripada salah satu.
+        super().setText(QFontMetrics(self.font()).elidedText(
+            self._penuh, Qt.ElideMiddle, lebar) if lebar else "")
 
 
 class MainWindow(QMainWindow):
@@ -65,7 +129,8 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        layout.addLayout(self._build_file_bar())
+        self.addToolBar(self._build_toolbar())
+        layout.addWidget(self._file_label)
 
         splitter = QSplitter(Qt.Vertical)
         splitter.addWidget(self._build_table())
@@ -84,9 +149,18 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self._catalog_label)
         self._set_connection_status(False)
 
-    def _build_file_bar(self) -> QHBoxLayout:
-        bar = QHBoxLayout()
-        self._file_label = QLabel("Belum ada file dibuka")
+    def _build_toolbar(self) -> QToolBar:
+        """Bilah alat, bukan baris tombol biasa.
+
+        QToolBar memunculkan tombol luapan sendiri saat isinya tidak muat, jadi
+        tidak ada tombol yang pernah jadi tak terjangkau -- berapa pun lebar
+        jendelanya. Baris tombol biasa cuma terpotong diam-diam.
+        """
+        bar = QToolBar("Perkakas")
+        bar.setMovable(False)
+        bar.setFloatable(False)
+
+        self._file_label = LabelPendek("Belum ada file dibuka")
         self._file_label.setStyleSheet("font-weight: 600;")
 
         buka = QPushButton("Buka template terisi…")
@@ -131,17 +205,18 @@ class MainWindow(QMainWindow):
             "Profil harian: satu sesi saja, jadi tidak ada yang saling "
             "menendang — tapi Chrome harus ditutup sepenuhnya dulu setiap kali."
         )
+        self._profil.setSizeAdjustPolicy(
+            QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self._profil.setMinimumContentsLength(10)
         self._profil.currentIndexChanged.connect(self._ganti_profil)
 
-        bar.addWidget(self._file_label, stretch=1)
-        bar.addWidget(QLabel("Profil Chrome:"))
+        # Label path pindah ke barisnya sendiri di bawah bilah ini: di dalam
+        # bilah, ia ikut menghitung lebar dan mendorong tombol ke luapan.
+        for widget in (buka, buat, muat_ulang, kategori, uji, chrome_btn):
+            bar.addWidget(widget)
+        bar.addSeparator()
+        bar.addWidget(QLabel("Profil Chrome: "))
         bar.addWidget(self._profil)
-        bar.addWidget(chrome_btn)
-        bar.addWidget(uji)
-        bar.addWidget(kategori)
-        bar.addWidget(muat_ulang)
-        bar.addWidget(buka)
-        bar.addWidget(buat)
         return bar
 
     def _build_table(self) -> QTableView:
@@ -185,6 +260,10 @@ class MainWindow(QMainWindow):
         self._mode.setToolTip(
             "Sejauh mana aplikasi boleh bertindak setelah form terisi"
         )
+        # Tanpa ini, combobox menuntut selebar pilihan terpanjangnya dan ikut
+        # mengunci lebar minimum jendela.
+        self._mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self._mode.setMinimumContentsLength(12)
         bar.addWidget(QLabel("Setelah terisi:"))
         bar.addWidget(self._mode)
 
@@ -222,7 +301,10 @@ class MainWindow(QMainWindow):
             bar.addWidget(button)
 
         bar.addStretch(1)
-        self._summary = QLabel()
+        # Ringkasan bisa panjang ("11 baris · 3 sukses · 2 gagal · …"). Sebagai
+        # QLabel biasa, panjangnya ikut menentukan lebar minimum jendela.
+        self._summary = LabelPendek()
+        self._summary.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         bar.addWidget(self._summary)
         return bar
 
