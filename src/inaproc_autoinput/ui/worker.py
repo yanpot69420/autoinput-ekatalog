@@ -14,6 +14,7 @@ from ..runner import (
     Mode,
     Ringkasan,
     RunnerError,
+    pesan_penghalang,
 )
 
 
@@ -67,6 +68,13 @@ class RunWorker(QThread):
 
         try:
             if self._jobs is None:
+                # Tersambung belum berarti bisa dipakai: sesi yang sudah
+                # berakhir menampilkan modal beroverlay, dan uji koneksi adalah
+                # tempat paling awal untuk mengetahuinya.
+                halangan = runner.penghalang()
+                if halangan:
+                    self.koneksi.emit(Hasil(False, pesan_penghalang(halangan)))
+                    return
                 alamat = runner.page.url if runner.page else "(tanpa halaman)"
                 self.koneksi.emit(Hasil(True, f"Tersambung. Tab aktif: {alamat}"))
                 return

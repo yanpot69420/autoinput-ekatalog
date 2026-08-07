@@ -154,6 +154,25 @@ belaka: Chrome yang dibuka tanpa alamat hanya menampilkan tab baru, dan tab itu
 tidak muncul sebagai target di `/json/list` — port debug hidup tapi tidak ada
 yang bisa dikendalikan, dengan pesan galat yang menyesatkan.
 
+### Kalau portal terasa berhenti merespons
+
+Dua sebab yang sudah pernah terjadi, dan keduanya tidak terlihat seperti apa
+adanya:
+
+**Kotak "Akun Telah Keluar".** Portal menutupi seluruh halaman dengan overlay
+ber-`z-index` 99999 saat sesimu berakhir — biasanya karena akun yang sama
+dipakai masuk dari browser lain, dan portal hanya mengizinkan satu sesi.
+Halaman di bawahnya tetap terlihat normal, tapi semua klik dan ketikan ditelan
+overlay itu, jadi rasanya seperti lag parah. Aplikasi sekarang mengenalinya dan
+menyebutkannya, bukan menunggu sampai batas waktunya habis. Login ulang di
+jendela Chrome itu.
+
+**Chrome yang sudah lama hidup.** Terukur di rangkaian uji yang sama: 100 detik
+di Chrome yang sudah dipakai berjam-jam, 29 detik setelah Chrome dijalankan
+ulang — kode identik, dua kali pengukuran masing-masing. Kalau pengisian mulai
+terasa berat, tutup jendela Chrome portal lalu klik **Buka Chrome portal** lagi.
+Sesi login bertahan karena profilnya permanen.
+
 Alur pemakaian:
 
 1. **Buat template kosong…** → simpan, kirim ke penyedia untuk diisi.

@@ -46,6 +46,11 @@ SEL_DOKUMEN = "#document-field-input"
 SEL_ATRIBUT_UTAMA = 'input[name^="productInformations.mainInformations."]'
 SEL_ATRIBUT_LAIN = 'input[name^="productInformations.additionalInformations."]'
 SEL_OPSI_TERLIHAT = '[role="option"]:visible, [class*="option"]:visible'
+# Portal memakai modal beroverlay untuk hal yang menghentikan segalanya --
+# terutama "Akun Telah Keluar", yang muncul bila akun yang sama dipakai masuk
+# dari browser lain. Halaman di bawahnya tetap terlihat normal, tapi overlaynya
+# menelan semua klik dan ketikan.
+SEL_MODAL = '[role="dialog"]:visible'
 
 SAKLAR = {
     "pre_order": "#form-product-preorder-isActive-switch",
@@ -515,6 +520,42 @@ def _normalisasi(teks: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(teks or "").lower()).strip()
 
 
+def penghalang(page) -> str:
+    """Isi modal yang sedang menutupi halaman, atau string kosong.
+
+    Dibaca sebelum menyentuh apa pun. Tanpa ini, satu modal membuat tiap klik
+    menunggu sampai batas waktunya habis -- setengah menit per baris, tiga baris
+    berturut-turut, lalu antrean berhenti dengan pesan yang cuma menyebut
+    "Timeout" dan tidak menjelaskan apa-apa.
+    """
+    try:
+        dialog = page.locator(SEL_MODAL)
+        if not dialog.count():
+            return ""
+        return " ".join(dialog.first.inner_text().split())
+    except Exception:  # noqa: BLE001 -- pemeriksaan bantu, tidak boleh menggagalkan
+        return ""
+
+
+def pesan_penghalang(teks: str) -> str:
+    """Terjemahkan isi modal jadi petunjuk yang bisa ditindaklanjuti."""
+    if re.search(r"telah keluar|masuk kembali", teks, re.I):
+        return (
+            "Sesi portalmu sudah berakhir, dan portal menutupi halaman dengan "
+            "kotak 'Akun Telah Keluar'. Selama kotak itu ada, tidak ada tombol "
+            "yang bisa diklik dan tidak ada kolom yang bisa diketik — halaman "
+            "terlihat normal tapi diam saja.\n\n"
+            "Login ulang di jendela Chrome yang dibuka aplikasi, lalu jalankan "
+            "lagi. Ini muncul bila akun yang sama dipakai masuk dari browser "
+            "lain; portal hanya mengizinkan satu sesi."
+        )
+    return (
+        "Portal menampilkan kotak yang menutupi seluruh halaman, jadi tidak ada "
+        f"yang bisa diklik:\n\n  {teks[:200]}\n\n"
+        "Selesaikan dulu di jendela Chrome, lalu jalankan lagi."
+    )
+
+
 class BrowserRunner:
     """Menempel ke Chrome yang sudah login, lalu mengisi baris satu per satu."""
 
@@ -563,6 +604,15 @@ class BrowserRunner:
         self.page.locator(SEL_KATEGORI).first.wait_for(
             state="visible", timeout=TIMEOUT_PANJANG
         )
+        # Kotak kategori bisa terlihat sekaligus tak tersentuh: modal portal
+        # menutupinya dari atas. Diperiksa di sini, sebelum satu klik pun
+        # dicoba, karena setelah itu galatnya cuma "Timeout".
+        halangan = self.penghalang()
+        if halangan:
+            raise RunnerError(pesan_penghalang(halangan))
+
+    def penghalang(self) -> str:
+        return penghalang(self.page) if self.page else ""
 
     def jalankan(self, data: dict, mode: Mode = Mode.ISI_SAJA, catatan=None,
                  assets: Assets | None = None, batal=None) -> Hasil:
@@ -585,8 +635,14 @@ class BrowserRunner:
             return Hasil(False, str(error), langkah=pengisi.langkah,
                          peringatan=pengisi.peringatan)
         except Exception as error:  # noqa: BLE001 -- apa pun dari browser
-            return Hasil(False, f"{type(error).__name__}: {error}".split("\n")[0],
-                         langkah=pengisi.langkah, peringatan=pengisi.peringatan)
+            # Sesi bisa berakhir di tengah pengisian. Yang terlihat cuma klik
+            # yang kehabisan waktu, padahal sebabnya modal yang baru muncul --
+            # jadi diperiksa dulu sebelum galatnya dilaporkan apa adanya.
+            halangan = self.penghalang()
+            pesan = (pesan_penghalang(halangan) if halangan
+                     else f"{type(error).__name__}: {error}".split("\n")[0])
+            return Hasil(False, pesan, langkah=pengisi.langkah,
+                         peringatan=pengisi.peringatan)
 
         tersimpan = mode is not Mode.ISI_SAJA
         pesan = "tersimpan" if tersimpan else "terisi, menunggu kamu menyimpan"
@@ -605,6 +661,7 @@ class BrowserRunner:
 
 __all__ = [
     "BATAS_GAGAL_BERUNTUN",
+    "SEL_MODAL",
     "BrowserRunner",
     "CDP_DEFAULT",
     "Dibatalkan",
@@ -614,4 +671,6 @@ __all__ = [
     "Ringkasan",
     "RunnerError",
     "URL_TAMBAH",
+    "penghalang",
+    "pesan_penghalang",
 ]

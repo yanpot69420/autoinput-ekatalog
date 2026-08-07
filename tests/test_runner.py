@@ -32,6 +32,8 @@ from inaproc_autoinput.runner import (
     RunnerError,
     _angka,
     _normalisasi,
+    penghalang,
+    pesan_penghalang,
 )
 
 MOCK = Path(__file__).with_name("mock_form.html")
@@ -259,6 +261,55 @@ def test_label_atribut_mengikuti_kategori(halaman, berkas):
 
     pengisi.pilih_kategori("Peralatan Kantor > Furnitur Kantor > Meja Kerja")
     assert pengisi.label_atribut() == ["Satuan Pengukuran", "Bahan Utama"]
+
+
+def _pasang_modal(halaman, teks: str) -> None:
+    """Tiru modal beroverlay portal: terlihat, dan menelan semua klik."""
+    halaman.evaluate(
+        """(teks) => {
+             const d = document.createElement('div');
+             d.setAttribute('role', 'dialog');
+             d.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff';
+             d.textContent = teks;
+             document.body.appendChild(d);
+           }""",
+        teks,
+    )
+
+
+@pytestmark_browser
+def test_modal_akun_keluar_dikenali_bukan_dibiarkan_kehabisan_waktu(halaman, server):
+    """Sesi yang berakhir menutupi halaman, bukan menghilangkan kolomnya.
+
+    Tanpa pengenalan ini tiap klik menunggu sampai batas waktunya habis, dan
+    galatnya cuma menyebut "Timeout" -- tidak sedikit pun menyinggung sesi.
+    """
+    _pasang_modal(halaman, "Akun Telah Keluar Anda terdeteksi keluar dari "
+                           "salah satu platform pengadaan. Harap masuk kembali.")
+    pesan = pesan_penghalang(penghalang(halaman))
+    assert "Sesi portalmu sudah berakhir" in pesan
+    assert "Login ulang" in pesan
+
+
+@pytestmark_browser
+def test_modal_lain_dilaporkan_apa_adanya(halaman):
+    _pasang_modal(halaman, "Pemberitahuan Ada pemeliharaan sistem malam ini.")
+    pesan = pesan_penghalang(penghalang(halaman))
+    assert "menutupi seluruh halaman" in pesan
+    assert "pemeliharaan sistem" in pesan
+
+
+@pytestmark_browser
+def test_tanpa_modal_tidak_ada_halangan(halaman):
+    assert penghalang(halaman) == ""
+
+
+@pytestmark_browser
+def test_runner_melihat_halangan_di_halamannya_sendiri(runner, halaman):
+    """Dipakai uji koneksi dan penanganan galat, jadi harus lewat runner."""
+    assert runner.penghalang() == ""
+    _pasang_modal(halaman, "Akun Telah Keluar Harap masuk kembali.")
+    assert "Akun Telah Keluar" in runner.penghalang()
 
 
 @pytestmark_browser
