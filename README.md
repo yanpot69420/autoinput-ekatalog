@@ -154,6 +154,26 @@ belaka: Chrome yang dibuka tanpa alamat hanya menampilkan tab baru, dan tab itu
 tidak muncul sebagai target di `/json/list` — port debug hidup tapi tidak ada
 yang bisa dikendalikan, dengan pesan galat yang menyesatkan.
 
+### Membuka Chrome sendiri, di luar aplikasi
+
+Aplikasi tidak harus yang menjalankan Chrome. Buat pintasan terpisah:
+
+```bash
+./scripts/buat-shortcut-chrome.sh
+```
+
+Hasilnya **Chrome Portal INAPROC.app** — klik dua kali, Chrome terbuka dengan
+port debug dan profil yang sama seperti pilihan di aplikasi. Login sekali, lalu
+biarkan terbuka berhari-hari. Di aplikasi cukup klik **Uji koneksi browser**;
+tombol "Buka Chrome portal" tidak perlu disentuh sama sekali.
+
+Enaknya begini: umur Chrome tidak lagi terikat pada aplikasi. Aplikasi boleh
+ditutup dan dibuka berkali-kali tanpa mengganggu sesi yang sedang berjalan, dan
+tidak ada satu pun tindakan aplikasi yang bisa menutup browsermu.
+
+Di Windows, jalankan `scripts\buka-chrome-windows.bat`. Kalau Chrome ternyata
+masih berjalan, keduanya menolak dengan penjelasan — bukan gagal diam-diam.
+
 ### Dua pilihan profil Chrome
 
 Pilih di kotak **Profil Chrome** pada bilah atas. Pilihannya tersimpan di

@@ -4,7 +4,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from inaproc_autoinput import chrome
+
+
+@pytest.fixture(autouse=True)
+def pilihan_terisolasi(tmp_path, monkeypatch):
+    """Jangan pernah membaca pilihan profil nyata milik pengguna.
+
+    command() dan profil() mengikut berkas pilihan di home. Dibiarkan begitu,
+    hasil uji berubah mengikuti apa yang kebetulan dipilih di aplikasi -- dan
+    uji yang lolos di satu mesin gagal di mesin lain tanpa ada kode yang
+    berubah. Sempat terjadi persis begitu.
+    """
+    monkeypatch.setattr(chrome, "PILIHAN_PATH", tmp_path / "pilihan.json")
 
 
 def test_perintah_memuat_port_dan_profil_terpisah():
@@ -200,3 +214,12 @@ def test_launch_menolak_bila_profilnya_sedang_dipakai(tmp_path):
 def test_perintah_memakai_profil_yang_diminta(tmp_path):
     argumen = chrome.command(dir_profil=tmp_path)
     assert f"--user-data-dir={tmp_path}" in argumen
+
+
+def test_perintah_mengikuti_pilihan_yang_tersimpan(tmp_path):
+    """Tanpa dir_profil, yang dipakai adalah pilihan di aplikasi."""
+    chrome.set_pakai_harian(True, chrome.PILIHAN_PATH)
+    assert f"--user-data-dir={chrome.PROFIL_HARIAN}" in chrome.command()
+
+    chrome.set_pakai_harian(False, chrome.PILIHAN_PATH)
+    assert f"--user-data-dir={chrome.PROFIL_APLIKASI}" in chrome.command()
