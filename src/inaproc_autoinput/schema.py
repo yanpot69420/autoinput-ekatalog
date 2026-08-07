@@ -96,8 +96,12 @@ CORE_FIELDS: tuple[Field, ...] = (
     Field("deskripsi", "Deskripsi", G_PRODUK, max_len=2000, width=44),
 
     # --- KBKI & PDN
-    Field("kbki", "Kode KBKI", G_PDN, required=True,
-          hint="Kode saja, mis. 54310. Daftarnya berbeda tiap kategori", width=16),
+    # Wajib di portal, tapi bukan di sini: daftar kode yang sah berbeda tiap
+    # kategori dan tidak bisa ditebak dari luar, jadi lebih sering dipilih
+    # sendiri di form. Dikosongkan berarti aplikasi melewatinya dan kamu yang
+    # memilih di portal sebelum menyimpan -- diingatkan, bukan diblokir.
+    Field("kbki", "Kode KBKI", G_PDN,
+          hint="Boleh kosong; kalau kosong dipilih manual di portal", width=16),
     Field("pdn_klasifikasi", "Klasifikasi Produk", G_PDN, required=True,
           options=ref.KLASIFIKASI_PDN, width=18),
     # Tiga pertanyaan self-declare PDN tidak bertanda Wajib di form -- portal

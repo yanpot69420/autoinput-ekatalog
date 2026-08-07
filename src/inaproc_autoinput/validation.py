@@ -176,6 +176,15 @@ def validate(
 
     issues.extend(_check_pairs(row))
 
+    if _blank(row.get("kbki")):
+        # Portal tetap mewajibkannya. Kalau dilewati diam-diam, produk baru
+        # ketahuan tidak bisa disimpan setelah seluruh form terisi.
+        issues.append(Issue(
+            "kbki", "Kode KBKI",
+            "kosong — aplikasi melewatinya; pilih sendiri di portal sebelum menyimpan",
+            blocking=False,
+        ))
+
     if not attribute_pairs(row):
         issues.append(Issue(
             "atribut_1_nama", "Atribut Khusus Kategori",

@@ -50,6 +50,20 @@ def test_produk_sektoral_wajib(lengkap):
     assert any(i.key == "produk_sektoral" for i in _errors(row))
 
 
+def test_kbki_kosong_tidak_memblokir_tapi_diingatkan(lengkap):
+    """Diisi manual di portal: daftar kode sahnya berbeda tiap kategori."""
+    row = {k: v for k, v in lengkap.items() if k != "kbki"}
+    assert not [i for i in _errors(row) if i.key == "kbki"]
+
+    catatan = [i for i in validate(row) if i.key == "kbki"]
+    assert catatan and not catatan[0].blocking
+    assert "pilih sendiri di portal" in catatan[0].message
+
+
+def test_kbki_terisi_tidak_memunculkan_catatan(lengkap):
+    assert not [i for i in validate(lengkap) if i.key == "kbki"]
+
+
 def test_pdn_tidak_wajib(lengkap):
     """Tiga pertanyaan self-declare PDN tidak bertanda Wajib di form.
 
