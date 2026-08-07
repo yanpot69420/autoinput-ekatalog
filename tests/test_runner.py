@@ -321,3 +321,24 @@ def test_ganti_kategori_menyetujui_konfirmasi(halaman, berkas):
     pengisi.pilih_kategori(_baris(berkas)["kategori"])
     pengisi.pilih_kategori("Bidang Bina Marga > Divisi 3 Pekerjaan Tanah dan Geosintetik > 3.2 Timbunan")
     assert halaman.locator("#kategori").input_value().endswith("3.2 Timbunan")
+
+
+@pytestmark_browser
+@pytest.mark.parametrize("mode,tersimpan", [
+    (Mode.ISI_SAJA, False),
+    (Mode.SIMPAN_DRAF, True),
+])
+def test_hasil_membedakan_terisi_dari_tersimpan(runner, halaman, berkas,
+                                                monkeypatch, mode, tersimpan):
+    """Mode "Isi saja" berhasil tanpa menyimpan apa pun.
+
+    Bedanya penting: baris yang cuma terisi masih harus dikerjakan. Kalau
+    ditandai sukses, "Lanjutkan sisanya" akan melewatinya diam-diam dan
+    produknya tidak pernah masuk ke portal.
+    """
+    monkeypatch.setattr(runner, "buka_form", lambda: None)
+    hasil = runner.jalankan(_baris(berkas), mode, assets=_assets(berkas))
+
+    assert hasil.berhasil, hasil.pesan
+    assert hasil.tersimpan is tersimpan
+    assert ("tersimpan" if tersimpan else "menunggu kamu menyimpan") in hasil.pesan

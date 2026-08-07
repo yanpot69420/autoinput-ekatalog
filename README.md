@@ -32,11 +32,15 @@ lembar.
 
 Pilihan *Setelah terisi* menentukan sejauh mana aplikasi boleh bertindak:
 
-| Mode | Yang dilakukan |
-|---|---|
-| **Isi saja, jangan simpan** (bawaan) | Form diisi, aplikasi berhenti. Kamu yang memeriksa dan menekan tombol |
-| Simpan sebagai draf | Menekan *Simpan Draf Produk* |
-| Simpan (produk diajukan) | Menekan *Simpan* |
+| Mode | Yang dilakukan | Status baris |
+|---|---|---|
+| **Isi saja, jangan simpan** (bawaan) | Form diisi, aplikasi berhenti. Kamu yang memeriksa dan menekan tombol | **Terisi** |
+| Simpan sebagai draf | Menekan *Simpan Draf Produk* | Sukses |
+| Simpan (produk diajukan) | Menekan *Simpan* | Sukses |
+
+Baris yang cuma **Terisi** tidak dianggap selesai: tidak ada apa pun yang masuk
+ke portal, jadi baris itu tetap dihitung sebagai perlu dikerjakan. Menyamakannya
+dengan sukses akan membuat "Lanjutkan sisanya" melewatinya diam-diam.
 
 Dua mode terakhir mengubah data di akun penyedia, jadi selalu ada konfirmasi
 lebih dulu. Untuk produk pertama, pakai mode bawaan.

@@ -383,7 +383,15 @@ class MainWindow(QMainWindow):
         posisi, self._aktif = self._aktif, None
         row = self._model.row_at(posisi)
         if row is not None:
-            row.status = Status.SUKSES if hasil.berhasil else Status.GAGAL
+            # "Isi saja" berhasil tanpa menyimpan apa pun. Menandainya Sukses
+            # akan membuat baris ini dilewati nanti, padahal produknya belum
+            # pernah masuk ke portal.
+            if not hasil.berhasil:
+                row.status = Status.GAGAL
+            elif hasil.tersimpan:
+                row.status = Status.SUKSES
+            else:
+                row.status = Status.TERISI
             row.message = hasil.pesan
             row.produk_id = hasil.produk_id or row.produk_id
             if hasil.peringatan:
@@ -498,9 +506,12 @@ class MainWindow(QMainWindow):
         # ringkasan -- bukan diulang di tiap baris tabel.
         berkas = self._assets_panel.assets().masalah()
         catatan = f" · berkas: {len(berkas)} perlu dibereskan" if berkas else ""
+        terisi = counts[Status.TERISI]
+        belum_disimpan = f" · {terisi} terisi belum disimpan" if terisi else ""
         self._summary.setText(
-            f"{counts[Status.SUKSES]} sukses · {counts[Status.GAGAL]} gagal · "
-            f"{siap} siap dijalankan · {bermasalah} perlu diperbaiki{catatan}"
+            f"{counts[Status.SUKSES]} sukses · {counts[Status.GAGAL]} gagal"
+            f"{belum_disimpan} · {siap} siap dijalankan · "
+            f"{bermasalah} perlu diperbaiki{catatan}"
         )
 
     def _set_connection_status(self, connected: bool) -> None:

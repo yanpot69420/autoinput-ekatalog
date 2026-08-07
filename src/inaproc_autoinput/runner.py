@@ -81,6 +81,10 @@ class Mode(str, Enum):
 class Hasil:
     berhasil: bool
     pesan: str = ""
+    # Benar hanya bila produk sungguh disimpan ke portal. Mode "Isi saja"
+    # berhasil tanpa menyimpan apa pun, dan bedanya penting: baris yang cuma
+    # terisi masih harus dikerjakan.
+    tersimpan: bool = False
     produk_id: str = ""
     langkah: list[str] = field(default_factory=list)
     peringatan: list[str] = field(default_factory=list)
@@ -236,12 +240,7 @@ class ProductFormFiller:
         """Bagian Lampiran hanya dibedakan urutannya, jadi dicocokkan lewat judul."""
         if not lampiran:
             return
-        masukan = self.page.locator(SEL_DOKUMEN)
-        jumlah = masukan.count()
-        judul = [
-            _normalisasi(t) for t in
-            self.page.locator("text=Format .pdf").all_inner_texts()[:jumlah]
-        ]
+        jumlah = self.page.locator(SEL_DOKUMEN).count()
         urutan = self._urutan_lampiran(jumlah)
 
         for nama, berkas in lampiran.items():
@@ -442,8 +441,10 @@ class BrowserRunner:
             return Hasil(False, f"{type(error).__name__}: {error}".split("\n")[0],
                          langkah=pengisi.langkah, peringatan=pengisi.peringatan)
 
-        pesan = "terisi, menunggu kamu menyimpan" if mode is Mode.ISI_SAJA else "tersimpan"
-        return Hasil(True, pesan, produk_id, pengisi.langkah, pengisi.peringatan)
+        tersimpan = mode is not Mode.ISI_SAJA
+        pesan = "tersimpan" if tersimpan else "terisi, menunggu kamu menyimpan"
+        return Hasil(True, pesan, tersimpan, produk_id,
+                     pengisi.langkah, pengisi.peringatan)
 
     def close(self) -> None:
         for obj, tutup in ((self._browser, "close"), (self._playwright, "stop")):

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from inaproc_autoinput.categories import Catalog, Category, load_cache, save_cache

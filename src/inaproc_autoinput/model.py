@@ -13,6 +13,11 @@ from .schema import attribute_pairs, split_category
 class Status(str, Enum):
     MENUNGGU = "menunggu"
     BERJALAN = "berjalan"
+    # Form sudah terisi tapi belum disimpan -- hasil mode "Isi saja". Bukan
+    # sukses: tidak ada apa pun yang masuk ke portal, jadi baris ini masih
+    # harus dikerjakan. Menyamakannya dengan sukses akan membuat "Lanjutkan
+    # sisanya" melewatinya diam-diam.
+    TERISI = "terisi"
     SUKSES = "sukses"
     GAGAL = "gagal"
     DILEWATI = "dilewati"
@@ -22,6 +27,7 @@ class Status(str, Enum):
         return {
             Status.MENUNGGU: "Menunggu",
             Status.BERJALAN: "Proses",
+            Status.TERISI: "Terisi",
             Status.SUKSES: "Sukses",
             Status.GAGAL: "Gagal",
             Status.DILEWATI: "Dilewati",
@@ -32,6 +38,7 @@ class Status(str, Enum):
         return {
             Status.MENUNGGU: "○",
             Status.BERJALAN: "⟳",
+            Status.TERISI: "◐",
             Status.SUKSES: "✓",
             Status.GAGAL: "✗",
             Status.DILEWATI: "–",

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
 
 from .schema import (
     TIPE_BARANG,
@@ -45,36 +44,32 @@ def _blank(value) -> bool:
     return value is None or str(value).strip() == ""
 
 
-def _check_path(fld: Field, text: str) -> list[str]:
-    """Periksa path berkas: ekstensi, keberadaan, dan ukurannya."""
-    pesan: list[str] = []
+# Form membatasi desimal maksimal dua digit ("Maks. 2 digit di belakang koma").
+# Lebih dari dua digit setelah titik hampir pasti pemisah ribuan, bukan desimal.
+_ANGKA_SAH = re.compile(r"\d+([.,]\d{1,2})?$")
+# Diawali angka bukan nol: "0,055" itu desimal tiga digit, bukan ribuan.
+_RIBUAN = re.compile(r"^[1-9]\d{0,2}([.,]\d{3})+$")
 
-    if text.lower().startswith(("http://", "https://")):
-        # Kekeliruan yang wajar: template unggah massal memang memakai tautan,
-        # tapi form tambah produk meminta berkas diunggah.
-        return ["form meminta unggah berkas, bukan tautan — isi dengan alamat "
-                "berkas di komputer ini"]
 
-    path = Path(text).expanduser()
+def _periksa_angka(text: str, key: str) -> list[str]:
+    """Periksa satu nilai numerik.
 
-    if path.suffix.lower() not in fld.file_ext:
-        pesan.append(
-            f"format harus {' atau '.join(fld.file_ext)}, bukan '{path.suffix or '?'}'"
-        )
-        return pesan
-
-    if not path.exists():
-        pesan.append(f"berkas tidak ditemukan: {path}")
-        return pesan
-    if not path.is_file():
-        pesan.append(f"bukan berkas: {path}")
-        return pesan
-
-    if fld.max_mb:
-        ukuran_mb = path.stat().st_size / (1024 * 1024)
-        if ukuran_mb > fld.max_mb:
-            pesan.append(f"ukuran {ukuran_mb:.1f} MB, batasnya {fld.max_mb} MB")
-    return pesan
+    Yang paling berbahaya bukan angka yang jelas salah, tapi '1.000'. Ditulis
+    orang Indonesia untuk seribu, dibaca portal sebagai satu. Kalau dibiarkan
+    lewat, stok meleset seribu kali lipat tanpa ada yang menyadarinya -- jadi
+    pola pemisah ribuan ditolak dengan pesan yang menyebut angka benarnya.
+    """
+    if _RIBUAN.fullmatch(text):
+        polos = re.sub(r"[.,]", "", text)
+        utuh = re.split(r"[.,]", text)[0]
+        return [f"'{text}' terbaca portal sebagai {utuh}, bukan {polos}. "
+                f"Tulis tanpa pemisah ribuan: {polos}"]
+    if not _ANGKA_SAH.fullmatch(text):
+        return [f"'{text}' harus angka polos, tanpa pemisah ribuan atau 'Rp'. "
+                "Desimal maksimal dua digit"]
+    if key == "harga_produk" and float(text.replace(",", ".")) == 0:
+        return ["harga tidak boleh 0"]
+    return []
 
 
 def _check_field(fld: Field, row: dict, tipe: str) -> list[Issue]:
@@ -115,16 +110,8 @@ def _check_field(fld: Field, row: dict, tipe: str) -> list[Issue]:
         add(f"panjang {len(text)} karakter, maksimum {fld.max_len}")
 
     if fld.numeric:
-        if not re.fullmatch(r"\d+([.,]\d+)?", text):
-            add(f"'{text}' harus angka polos, tanpa titik ribuan atau 'Rp'")
-        elif fld.key == "harga_produk" and float(text.replace(",", ".")) == 0:
-            add("harga tidak boleh 0")
-
-    if fld.url and not text.lower().startswith(("http://", "https://")):
-        add("harus berupa tautan yang diawali http:// atau https://")
-
-    if fld.is_file:
-        for pesan in _check_path(fld, text):
+        add_numerik = _periksa_angka(text, fld.key)
+        for pesan in add_numerik:
             add(pesan)
 
     return issues
@@ -183,7 +170,7 @@ def validate(
         issues.extend(temuan)
 
     for fld in fields:
-        if fld.group.startswith(("Atribut", "Lampiran")):
+        if fld.group.startswith("Atribut"):
             continue  # blok berpasangan diperiksa terpisah
         issues.extend(_check_field(fld, row, tipe))
 

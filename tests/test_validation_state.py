@@ -87,6 +87,24 @@ def test_harga_harus_angka_polos(lengkap):
     assert any("angka polos" in m for m in pesan)
 
 
+def test_pemisah_ribuan_ditolak_dengan_angka_benarnya(lengkap):
+    """'1.000' dibaca portal sebagai 1 -- meleset seribu kali tanpa disadari."""
+    pesan = [i.message for i in _errors(dict(lengkap, stok="1.000")) if i.key == "stok"]
+    assert pesan and "terbaca portal sebagai 1, bukan 1000" in pesan[0]
+    assert "1000" in pesan[0]
+
+
+def test_desimal_dua_digit_lolos(lengkap):
+    for nilai in ("332,35", "332.35", "1,5", "1000"):
+        assert not [i for i in _errors(dict(lengkap, stok=nilai)) if i.key == "stok"], nilai
+
+
+def test_desimal_lebih_dari_dua_digit_ditolak(lengkap):
+    """Form membatasi maksimal dua digit di belakang koma."""
+    pesan = [i.message for i in _errors(dict(lengkap, stok="0,055")) if i.key == "stok"]
+    assert pesan and "dua digit" in pesan[0]
+
+
 def test_harga_nol_ditolak(lengkap):
     assert any(i.key == "harga_produk" for i in _errors(dict(lengkap, harga_produk="0")))
 
@@ -167,3 +185,13 @@ def test_tanpa_berkas_status_tidak_error(tmp_path, lengkap):
 def test_atribut_terbaca_dari_baris(lengkap):
     row = rows_from_records([dict(lengkap, _row=5)])[0]
     assert row.atribut == {"Satuan Pengukuran": "M3"}
+
+
+def test_status_terisi_belum_dianggap_selesai(lengkap):
+    """Baris yang cuma terisi masih harus dikerjakan, jadi tetap 'siap'."""
+    row = rows_from_records([dict(lengkap, _row=5)])[0]
+    row.status = Status.TERISI
+    assert row.siap
+
+    row.status = Status.SUKSES
+    assert not row.siap

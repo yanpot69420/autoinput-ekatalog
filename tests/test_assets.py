@@ -118,9 +118,28 @@ def test_foto_dibatasi_lima(berkas):
 
 
 def test_tanpa_apa_apa_belum_siap():
-    masalah = Assets().masalah()
-    assert any("Foto" in m for m in masalah)
-    assert any("Dokumen" in m for m in masalah)
+    a = Assets()
+    assert any("Foto" in m for m in a.masalah())
+    # Dokumen wajib berbeda tiap kategori, jadi cuma diingatkan.
+    assert any("dokumen" in c.lower() for c in a.catatan())
+    assert not any("Dokumen" in m for m in a.masalah())
+
+
+def test_foto_khusus_per_baris_tidak_bikin_alarm_palsu(berkas):
+    """Ringkasan tidak boleh mengeluh 'belum ada foto' bila tiap baris punya sendiri."""
+    a = Assets()
+    a.set_foto_baris(5, [berkas["foto"]])
+    assert not [m for m in a.masalah() if "belum ada foto" in m]
+
+    kosong = Assets()
+    assert [m for m in kosong.masalah() if "belum ada foto" in m]
+
+
+def test_dokumen_rusak_tetap_jadi_masalah(berkas):
+    a = Assets(foto_umum=[berkas["foto"]])
+    a.set_dokumen("Sertifikat Standar", "/tidak/ada/s.pdf")
+    assert a.catatan() == []
+    assert any("tidak ditemukan" in m for m in a.masalah())
 
 
 def test_lengkap_dianggap_siap(berkas):

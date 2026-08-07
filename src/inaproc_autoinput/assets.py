@@ -122,7 +122,10 @@ class Assets:
         pesan: list[str] = []
 
         foto = self.foto_untuk(excel_row) if excel_row is not None else self.foto_umum
-        if not foto:
+        if not foto and not (excel_row is None and self.foto_baris):
+            # Tanpa nomor baris, foto khusus per baris ikut dihitung -- kalau
+            # tidak, ringkasan akan terus mengeluh "belum ada foto" padahal
+            # setiap baris sudah punya fotonya masing-masing.
             pesan.append("Foto: belum ada foto dipilih; produk wajib punya minimal satu")
         for berkas in foto:
             galat = periksa(berkas, FOTO_EXT)
@@ -137,11 +140,6 @@ class Assets:
         if self.video_url and not self.video_url.lower().startswith(("http://", "https://")):
             pesan.append("URL Video: harus diawali http:// atau https://")
 
-        if not self.dokumen:
-            pesan.append(
-                "Dokumen: belum ada dokumen dipilih; kategori konstruksi "
-                "biasanya mewajibkan SBU dan sertifikat standar"
-            )
         for nama, berkas in sorted(self.dokumen.items()):
             galat = periksa(berkas, DOKUMEN_EXT, BATAS_DOKUMEN_MB)
             if galat:
@@ -150,6 +148,19 @@ class Assets:
 
     def siap(self, excel_row: int | None = None) -> bool:
         return not self.masalah(excel_row)
+
+    def catatan(self) -> list[str]:
+        """Hal yang perlu diperhatikan, tapi belum tentu salah.
+
+        Dokumen wajib berbeda tiap kategori dan baru diketahui setelah form
+        terbuka -- kategori Barang seperti Meja Kerja bisa jadi tidak minta
+        satu pun. Karena itu "belum ada dokumen" cuma diingatkan, bukan
+        dihitung sebagai masalah yang memblokir.
+        """
+        if not self.dokumen:
+            return ["Belum ada dokumen dipilih. Kategori konstruksi biasanya "
+                    "mewajibkan SBU dan sertifikat standar."]
+        return []
 
     # --- penyimpanan --------------------------------------------------------
 

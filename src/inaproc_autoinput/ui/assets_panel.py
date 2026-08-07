@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -287,9 +287,13 @@ class AssetsPanel(QWidget):
             self._url.setText(self._assets.video_url)
 
         masalah = self._assets.masalah(self._baris)
+        catatan = self._assets.catatan()
         if masalah:
             self._status.setText("Perlu dibereskan:\n  • " + "\n  • ".join(masalah))
             self._status.setStyleSheet(_MERAH)
+        elif catatan:
+            self._status.setText("Perlu diperhatikan:\n  • " + "\n  • ".join(catatan))
+            self._status.setStyleSheet(_ABU)
         else:
             self._status.setText("Semua berkas siap.")
             self._status.setStyleSheet(_HIJAU)

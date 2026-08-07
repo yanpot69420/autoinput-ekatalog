@@ -21,6 +21,7 @@ HEADERS = ["", "Baris", "Status", "Nama Produk", "Kategori Level 3", "Tipe", "Ke
 WARNA = {
     Status.MENUNGGU: QColor("#9e9e9e"),
     Status.BERJALAN: QColor("#42a5f5"),
+    Status.TERISI: QColor("#ffa726"),
     Status.SUKSES: QColor("#4caf50"),
     Status.GAGAL: QColor("#ef5350"),
     Status.DILEWATI: QColor("#bdbdbd"),
