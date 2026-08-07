@@ -120,15 +120,6 @@ class MainWindow(QMainWindow):
         chrome_btn.clicked.connect(self.open_chrome)
         self._btn_chrome = chrome_btn
 
-        ulang = QPushButton("Mulai ulang Chrome")
-        ulang.setToolTip(
-            "Tutup lalu buka lagi Chrome portal. Chrome yang sudah lama hidup "
-            "melambat cukup jauh — terukur 100 detik jadi 29 detik untuk "
-            "pekerjaan yang sama. Sesi loginmu tetap ada."
-        )
-        ulang.clicked.connect(self.restart_chrome)
-        self._btn_ulang = ulang
-
         self._profil = QComboBox()
         self._profil.addItem("Profil terpisah", False)
         self._profil.addItem("Profil Chrome harian", True)
@@ -146,7 +137,6 @@ class MainWindow(QMainWindow):
         bar.addWidget(QLabel("Profil Chrome:"))
         bar.addWidget(self._profil)
         bar.addWidget(chrome_btn)
-        bar.addWidget(ulang)
         bar.addWidget(uji)
         bar.addWidget(kategori)
         bar.addWidget(muat_ulang)
@@ -311,40 +301,6 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage(
                 f"Profil terpisah dipakai: {chrome.PROFIL_APLIKASI}", 10000)
-
-    def restart_chrome(self) -> None:
-        """Tutup lalu buka lagi Chrome portal, mengembalikan kecepatannya."""
-        if not chrome.is_listening():
-            self.open_chrome()
-            return
-
-        jawab = QMessageBox.question(
-            self, "Mulai ulang Chrome",
-            "Jendela Chrome portal akan ditutup lalu dibuka lagi.\n\n"
-            "Sesi loginmu tetap ada — profilnya permanen. Tapi apa pun yang "
-            "belum tersimpan di halaman itu akan hilang, termasuk form yang "
-            "sedang setengah terisi.\n\nLanjutkan?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
-        if jawab != QMessageBox.Yes:
-            return
-
-        # Menutup Chrome memakan beberapa detik dan menahan jendela ini selama
-        # itu. Kursor tunggu dipasang supaya diamnya terbaca sebagai sedang
-        # bekerja, bukan sebagai aplikasi yang ikut membeku.
-        self.statusBar().showMessage("Menutup Chrome…")
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            berhasil, pesan = chrome.mulai_ulang(url=URL_TAMBAH)
-        finally:
-            QApplication.restoreOverrideCursor()
-
-        if berhasil:
-            QMessageBox.information(self, "Chrome", pesan)
-            self.statusBar().showMessage(pesan, 10000)
-            self._periksa_setelah_chrome()
-        else:
-            QMessageBox.warning(self, "Chrome tidak bisa dimulai ulang", pesan)
 
     def create_template(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -669,7 +625,7 @@ class MainWindow(QMainWindow):
         # Menutup Chrome di tengah antrean akan memutus browser yang sedang
         # dipakai worker, jadi kedua tombol Chrome ikut dikunci.
         for tombol in (self._btn_uji, self._btn_buka, self._btn_buat,
-                       self._btn_kategori, self._btn_chrome, self._btn_ulang):
+                       self._btn_kategori, self._btn_chrome):
             tombol.setEnabled(not jalan)
         self._mode.setEnabled(not jalan)
         self._profil.setEnabled(not jalan)

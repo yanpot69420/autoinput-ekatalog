@@ -140,7 +140,8 @@ def main(argv: list[str] | None = None) -> int:
               "    bila ada proses perender yang tersangkut dan terus berputar\n"
               "    tanpa halaman — terukur membakar 72% CPU dengan satu tab\n"
               "    kosong, dan memperlambat semua situs, bukan cuma portal.\n"
-              "    Klik 'Mulai ulang Chrome' di aplikasi. Sesi login tetap ada.\n")
+              "    Jalankan ulang Chrome; sesi login tetap ada:\n"
+              "      python -m inaproc_autoinput.buka_chrome --mulai-ulang\n")
 
     print(f"Portal diukur {JUMLAH} kali:\n")
     for nomor, h in enumerate(hasil, 1):
@@ -170,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
               "jalankan di jam yang lebih sepi.")
     elif chrome_lambat:
         print(f"Portal sehat: form siap dalam {st.median(siap):.1f} detik.\n"
-              "Yang berat Chrome-nya — lihat catatan di atas: mulai ulang Chrome.")
+              "Yang berat Chrome-nya — lihat catatan di atas.")
     else:
         print(f"Portal sehat ({st.median(siap):.1f} detik) dan Chrome sehat.\n"
               "Kalau tetap terasa berat, yang melambat di luar keduanya —\n"

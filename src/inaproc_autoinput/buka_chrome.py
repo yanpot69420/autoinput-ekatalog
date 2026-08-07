@@ -9,6 +9,7 @@ Pilihan profilnya sama dengan yang tersimpan di aplikasi, jadi keduanya selalu
 menunjuk browser yang sama.
 
     python -m inaproc_autoinput.buka_chrome
+    python -m inaproc_autoinput.buka_chrome --mulai-ulang
 
 Keluar dengan kode 0 bila Chrome siap dipakai, 1 bila tidak -- pesannya dicetak
 supaya pembungkus pintasan bisa menampilkannya sebagai kotak peringatan.
@@ -24,6 +25,7 @@ from . import chrome
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     port = chrome.PORT_DEFAULT
+    mulai_ulang = "--mulai-ulang" in argv
     for arg in argv:
         if arg.startswith("--port="):
             try:
@@ -31,6 +33,15 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError:
                 print(f"Port tidak sah: {arg}")
                 return 1
+
+    if mulai_ulang:
+        # Chrome yang sudah lama hidup kadang meninggalkan proses perender yang
+        # terus berputar tanpa halaman, dan seluruh Chrome ikut melambat.
+        # Menjalankannya ulang mengembalikan kecepatannya; sesi login bertahan
+        # karena profilnya permanen.
+        berhasil, pesan = chrome.mulai_ulang(port=port)
+        print(pesan)
+        return 0 if berhasil else 1
 
     versi = chrome.is_listening(port)
     if versi:

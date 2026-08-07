@@ -31,9 +31,16 @@ from ..assets import DOKUMEN_LAZIM, IKUT_BERKAS, MAKS_FOTO, Assets, periksa
 from ..placeholder import PLACEHOLDER_PATH
 from ..schema import BATAS_DOKUMEN_MB, DOKUMEN_EXT, FOTO_EXT, VIDEO_EXT
 
-SARINGAN_PDF = "Dokumen PDF (*.pdf)"
-SARINGAN_FOTO = "Gambar (*.jpg *.jpeg *.png)"
-SARINGAN_VIDEO = "Video (*.mp4 *.mov)"
+# Saringan selalu diakhiri "Semua berkas", dan huruf besar ikut disebut.
+# Saringan yang cuma menyebut huruf kecil membuat berkas .PDF atau .JPG tampak
+# abu-abu di kotak dialog -- tidak bisa dipilih, tanpa keterangan apa pun, dan
+# dari kursi pengguna itu terlihat seperti aplikasi yang tidak menyediakan
+# opsinya. Salah pilih tidak berbahaya: periksa() menolaknya dengan pesan yang
+# menyebut format yang benar.
+SARINGAN_PDF = "Dokumen PDF (*.pdf *.PDF);;Semua berkas (*)"
+SARINGAN_FOTO = ("Gambar (*.jpg *.jpeg *.png *.JPG *.JPEG *.PNG)"
+                 ";;Semua berkas (*)")
+SARINGAN_VIDEO = "Video (*.mp4 *.mov *.MP4 *.MOV);;Semua berkas (*)"
 
 _HIJAU = "color: #2e7d32;"
 _MERAH = "color: #c62828;"

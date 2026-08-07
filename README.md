@@ -251,9 +251,14 @@ dijalankan ulang:
 
 Hal yang sama terlihat di rangkaian uji: 100 detik jadi 29 detik.
 
-Obatnya satu klik — **Mulai ulang Chrome**. Butuh sekitar satu detik, dan sesi
-loginmu tetap ada karena profilnya permanen. `periksa_portal` mengenali kondisi
-ini sendiri dan menyebutkannya.
+Obatnya menjalankan ulang Chrome. Butuh sekitar satu detik, dan sesi loginmu
+tetap ada karena profilnya permanen:
+
+```bash
+.venv/bin/python -m inaproc_autoinput.buka_chrome --mulai-ulang
+```
+
+`periksa_portal` mengenali kondisi ini sendiri dan menyebutkan perintahnya.
 
 Chrome ditutup lewat protokolnya sendiri (`Browser.close`), bukan dimatikan
 paksa. Bedanya penting: Chrome menuliskan cookie dan sesi ke profil saat keluar

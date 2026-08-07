@@ -102,48 +102,6 @@ def test_antrean_massal_tetap_melewati_baris_bermasalah(jendela):
     _pasang(jendela, rows)
     assert not rows[0].siap and rows[1].siap
     assert jendela._btn_semua.isEnabled()
-
-
-def test_tombol_chrome_terkunci_saat_antrean_berjalan(jendela):
-    """Menutup Chrome di tengah antrean memutus browser yang sedang dipakai."""
-    jendela._set_sedang_jalan(True)
-    assert not jendela._btn_ulang.isEnabled()
-    assert not jendela._btn_chrome.isEnabled()
-
-    jendela._set_sedang_jalan(False)
-    assert jendela._btn_ulang.isEnabled()
-
-
-def test_mulai_ulang_chrome_membuka_saja_bila_belum_jalan(jendela, monkeypatch):
-    """Tidak ada yang perlu ditutup, jadi tidak perlu bertanya apa-apa."""
-    from inaproc_autoinput.ui import main_window as mw
-
-    dipanggil = []
-    monkeypatch.setattr(mw.chrome, "is_listening", lambda *a, **k: "")
-    monkeypatch.setattr(mw.chrome, "launch",
-                        lambda *a, **k: dipanggil.append("launch") or (True, "ok"))
-    monkeypatch.setattr(mw.QMessageBox, "information", lambda *a, **k: None)
-    monkeypatch.setattr(mw.QMessageBox, "question",
-                        lambda *a, **k: pytest.fail("tidak perlu bertanya"))
-
-    jendela.restart_chrome()
-    assert dipanggil == ["launch"]
-
-
-def test_mulai_ulang_chrome_batal_tidak_menyentuh_apa_pun(jendela, monkeypatch):
-    from inaproc_autoinput.ui import main_window as mw
-
-    dipanggil = []
-    monkeypatch.setattr(mw.chrome, "is_listening", lambda *a, **k: "Chrome/1")
-    monkeypatch.setattr(mw.chrome, "mulai_ulang",
-                        lambda *a, **k: dipanggil.append("ulang") or (True, "ok"))
-    monkeypatch.setattr(mw.QMessageBox, "question",
-                        lambda *a, **k: mw.QMessageBox.No)
-
-    jendela.restart_chrome()
-    assert dipanggil == []
-
-
 def test_semua_tombol_jalan_terkunci_saat_antrean_berjalan(jendela):
     _pasang(jendela, _rows(Status.MENUNGGU, Status.MENUNGGU))
     jendela._set_sedang_jalan(True)
