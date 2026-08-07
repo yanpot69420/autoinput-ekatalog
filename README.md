@@ -375,6 +375,16 @@ pengulangan; dan spreadsheet bukan tempat yang wajar untuk memilih berkas.
 Dua tingkat: **dokumen dan foto umum** berlaku untuk semua baris, **foto per
 baris** menimpa foto umum untuk produk yang punya foto sendiri.
 
+Semua yang dipilih bisa dilepas lagi. Dokumen dan video punya tombol **Hapus**
+masing-masing; URL video juga. Foto tampil sebagai daftar — pilih satu atau
+beberapa lalu **Hapus terpilih**, jadi salah pilih satu dari lima tidak memaksa
+memilih ulang kelimanya. **Kosongkan semua berkas…** melepas semuanya sekaligus
+(dengan konfirmasi), berguna saat berpindah penyedia atau kompetisi.
+
+Yang dilepas cuma kaitannya — berkasnya sendiri tidak pernah dihapus dari
+komputer. *Masa Berlaku SBU* memang tidak punya tombol sendiri: ia selalu
+mengikuti berkas SBU.
+
 Portal meminta unggahan terpisah untuk *Masa Berlaku SBU* padahal isinya
 dokumen yang sama dengan *SBU* — panel mengikutkannya otomatis, cukup pilih
 sekali.

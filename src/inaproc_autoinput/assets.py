@@ -138,6 +138,30 @@ class Assets:
                 else:
                     self.dokumen.pop(pengikut, None)
 
+    def hapus_foto(self, berkas: str, excel_row: int | None = None) -> None:
+        """Buang satu foto saja, bukan seluruh daftarnya.
+
+        Salah pilih satu dari lima foto tidak boleh memaksa memilih ulang
+        kelimanya.
+        """
+        if excel_row is None:
+            self.foto_umum = [f for f in self.foto_umum if f != berkas]
+            return
+        sisa = [f for f in self.foto_baris.get(excel_row, []) if f != berkas]
+        self.set_foto_baris(excel_row, sisa)
+
+    def kosongkan(self) -> None:
+        """Lepas semua berkas, tanpa mengubah setelan placeholder.
+
+        Dipakai saat berpindah penyedia atau kompetisi: dokumen dan foto milik
+        klien sebelumnya tidak boleh diam-diam ikut terunggah.
+        """
+        self.dokumen.clear()
+        self.foto_umum.clear()
+        self.foto_baris.clear()
+        self.video = ""
+        self.video_url = ""
+
     @property
     def kosong(self) -> bool:
         return not (self.dokumen or self.foto_umum or self.foto_baris

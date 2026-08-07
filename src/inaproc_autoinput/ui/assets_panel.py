@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -17,6 +18,9 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -41,6 +45,97 @@ def _ringkas(path_teks: str, lebar: int = 52) -> str:
         return "belum dipilih"
     nama = Path(path_teks).name
     return nama if len(nama) <= lebar else nama[: lebar - 1] + "…"
+
+
+class PemilihFoto(QWidget):
+    """Daftar foto terpilih, dengan penghapusan satu per satu.
+
+    Dulu foto cuma ditampilkan sebagai satu baris teks dan satu-satunya cara
+    membuangnya adalah mengosongkan seluruh daftar. Salah pilih satu dari lima
+    berarti memilih ulang kelimanya.
+    """
+
+    berubah = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._berkas: list[str] = []
+
+        tata = QVBoxLayout(self)
+        tata.setContentsMargins(0, 0, 0, 0)
+        tata.setSpacing(4)
+
+        self._daftar = QListWidget()
+        self._daftar.setSelectionMode(QListWidget.ExtendedSelection)
+        self._daftar.setMaximumHeight(96)
+        self._daftar.setAlternatingRowColors(True)
+        self._daftar.itemSelectionChanged.connect(self._perbarui_tombol)
+        tata.addWidget(self._daftar)
+
+        bar = QHBoxLayout()
+        self._btn_tambah = QPushButton("Tambah…")
+        self._btn_tambah.clicked.connect(self._tambah)
+        self._btn_hapus = QPushButton("Hapus terpilih")
+        self._btn_hapus.clicked.connect(self._hapus_terpilih)
+        self._btn_kosong = QPushButton("Kosongkan")
+        self._btn_kosong.clicked.connect(self._kosongkan)
+        for tombol in (self._btn_tambah, self._btn_hapus, self._btn_kosong):
+            bar.addWidget(tombol)
+        bar.addStretch(1)
+        tata.addLayout(bar)
+
+        self.set_berkas([])
+
+    # --- data ---------------------------------------------------------------
+
+    def berkas(self) -> list[str]:
+        return list(self._berkas)
+
+    def set_berkas(self, berkas: list[str]) -> None:
+        self._berkas = list(berkas or [])
+        self._daftar.clear()
+        for path_teks in self._berkas:
+            galat = periksa(path_teks, FOTO_EXT)
+            item = QListWidgetItem(
+                Path(path_teks).name + (f"  — {galat}" if galat else ""))
+            item.setToolTip(path_teks)
+            item.setForeground(QColor("#c62828") if galat else QColor("#2e7d32"))
+            self._daftar.addItem(item)
+        self._perbarui_tombol()
+
+    def set_dapat_diubah(self, boleh: bool) -> None:
+        self._dapat_diubah = boleh
+        self._perbarui_tombol()
+
+    # --- aksi ---------------------------------------------------------------
+
+    def _perbarui_tombol(self) -> None:
+        boleh = getattr(self, "_dapat_diubah", True)
+        self._btn_tambah.setEnabled(boleh and len(self._berkas) < MAKS_FOTO)
+        self._btn_hapus.setEnabled(boleh and bool(self._daftar.selectedItems()))
+        self._btn_kosong.setEnabled(boleh and bool(self._berkas))
+        self._daftar.setEnabled(boleh)
+
+    def _tambah(self) -> None:
+        pilihan, _ = QFileDialog.getOpenFileNames(self, "Pilih foto", "", SARINGAN_FOTO)
+        if not pilihan:
+            return
+        # Yang sudah ada dipertahankan: "Tambah" menambah, bukan mengganti.
+        gabung = self._berkas + [p for p in pilihan if p not in self._berkas]
+        self.set_berkas(gabung[:MAKS_FOTO])
+        self.berubah.emit()
+
+    def _hapus_terpilih(self) -> None:
+        buang = {self._daftar.row(i) for i in self._daftar.selectedItems()}
+        if not buang:
+            return
+        self.set_berkas([f for n, f in enumerate(self._berkas) if n not in buang])
+        self.berubah.emit()
+
+    def _kosongkan(self) -> None:
+        if self._berkas:
+            self.set_berkas([])
+            self.berubah.emit()
 
 
 class AssetsPanel(QWidget):
@@ -100,12 +195,10 @@ class AssetsPanel(QWidget):
         self._layout.addWidget(self._judul(
             "Foto produk", f"Maksimal {MAKS_FOTO} foto, format .jpg .jpeg .png."
         ))
-        self._foto_umum = QLabel()
-        self._foto_umum.setStyleSheet(_ABU)
-        self._layout.addLayout(self._baris_tombol(
-            "Foto untuk semua baris", self._foto_umum,
-            [("Pilih…", self._pilih_foto_umum), ("Kosongkan", self._hapus_foto_umum)],
-        ))
+        self._layout.addWidget(QLabel("Foto untuk semua baris"))
+        self._foto_umum = PemilihFoto()
+        self._foto_umum.berubah.connect(self._foto_umum_berubah)
+        self._layout.addWidget(self._foto_umum)
 
         self._pakai_ph = QCheckBox(
             "Pakai foto placeholder bila belum ada foto"
@@ -118,19 +211,14 @@ class AssetsPanel(QWidget):
         self._pakai_ph.toggled.connect(self._ubah_placeholder)
         self._layout.addWidget(self._pakai_ph)
 
-        self._foto_khusus = QLabel()
-        self._foto_khusus.setStyleSheet(_ABU)
         self._label_khusus = QLabel("Foto khusus baris terpilih")
-        self._btn_foto_baris = QPushButton("Pilih…")
-        self._btn_foto_baris.clicked.connect(self._pilih_foto_baris)
-        self._btn_hapus_baris = QPushButton("Hapus")
-        self._btn_hapus_baris.clicked.connect(self._hapus_foto_baris)
-        bar = QHBoxLayout()
-        bar.addWidget(self._label_khusus)
-        bar.addWidget(self._foto_khusus, stretch=1)
-        bar.addWidget(self._btn_foto_baris)
-        bar.addWidget(self._btn_hapus_baris)
-        self._layout.addLayout(bar)
+        self._layout.addWidget(self._label_khusus)
+        self._foto_khusus = PemilihFoto()
+        self._foto_khusus.berubah.connect(self._foto_baris_berubah)
+        self._layout.addWidget(self._foto_khusus)
+        self._catatan_khusus = QLabel()
+        self._catatan_khusus.setStyleSheet(_ABU)
+        self._layout.addWidget(self._catatan_khusus)
 
         self._layout.addWidget(self._judul(
             "Video produk", "Opsional. Berkas .mp4/.mov, atau tautan YouTube."
@@ -145,10 +233,23 @@ class AssetsPanel(QWidget):
         self._url = QLineEdit()
         self._url.setPlaceholderText("https://www.youtube.com/watch?v=…")
         self._url.editingFinished.connect(self._simpan_url)
+        hapus_url = QPushButton("Hapus")
+        hapus_url.setToolTip("Kosongkan URL video")
+        hapus_url.clicked.connect(self._hapus_url)
         bar_url = QHBoxLayout()
         bar_url.addWidget(QLabel("URL Video"))
         bar_url.addWidget(self._url, stretch=1)
+        bar_url.addWidget(hapus_url)
         self._layout.addLayout(bar_url)
+
+        kosong_semua = QPushButton("Kosongkan semua berkas…")
+        kosong_semua.setToolTip(
+            "Lepas semua dokumen, foto, dan video sekaligus. Dipakai saat "
+            "berpindah penyedia atau kompetisi, supaya berkas klien sebelumnya "
+            "tidak ikut terunggah."
+        )
+        kosong_semua.clicked.connect(self._kosongkan_semua)
+        self._layout.addWidget(kosong_semua)
 
         self._status = QLabel()
         self._status.setWordWrap(True)
@@ -208,36 +309,38 @@ class AssetsPanel(QWidget):
         self._assets.set_dokumen(nama, "")
         self._selesai()
 
-    def _pilih_foto_umum(self) -> None:
-        berkas, _ = QFileDialog.getOpenFileNames(
-            self, "Pilih foto untuk semua baris", "", SARINGAN_FOTO
-        )
-        if berkas:
-            self._assets.foto_umum = berkas[:MAKS_FOTO]
+    def _foto_umum_berubah(self) -> None:
+        self._assets.foto_umum = self._foto_umum.berkas()
+        self._selesai()
+
+    def _foto_baris_berubah(self) -> None:
+        if self._baris is not None:
+            self._assets.set_foto_baris(self._baris, self._foto_khusus.berkas())
+        self._selesai()
+
+    def _hapus_url(self) -> None:
+        if self._assets.video_url or self._url.text().strip():
+            self._url.clear()
+            self._assets.video_url = ""
             self._selesai()
 
-    def _hapus_foto_umum(self) -> None:
-        self._assets.foto_umum = []
-        self._selesai()
+    def _kosongkan_semua(self) -> None:
+        if self._assets.kosong:
+            return
+        jawab = QMessageBox.question(
+            self, "Kosongkan semua berkas",
+            "Semua dokumen, foto, dan video akan dilepas dari template ini.\n\n"
+            "Berkasnya sendiri tidak dihapus dari komputer — yang dilepas cuma "
+            "kaitannya.\n\nLanjutkan?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if jawab == QMessageBox.Yes:
+            self._assets.kosongkan()
+            self._selesai()
 
     def _ubah_placeholder(self, nyala: bool) -> None:
         if nyala != self._assets.pakai_placeholder:
             self._assets.pakai_placeholder = nyala
-            self._selesai()
-
-    def _pilih_foto_baris(self) -> None:
-        if self._baris is None:
-            return
-        berkas, _ = QFileDialog.getOpenFileNames(
-            self, f"Pilih foto untuk baris {self._baris}", "", SARINGAN_FOTO
-        )
-        if berkas:
-            self._assets.set_foto_baris(self._baris, berkas)
-            self._selesai()
-
-    def _hapus_foto_baris(self) -> None:
-        if self._baris is not None:
-            self._assets.set_foto_baris(self._baris, [])
             self._selesai()
 
     def _pilih_video(self) -> None:
@@ -270,15 +373,8 @@ class AssetsPanel(QWidget):
             label.setStyleSheet(_MERAH if (galat or not berkas) else _HIJAU)
             label.setToolTip(berkas)
 
-        if self._assets.foto_umum:
-            self._foto_umum.setText(self._daftar(self._assets.foto_umum, FOTO_EXT))
-            self._foto_umum.setStyleSheet(_HIJAU)
-        elif self._assets.pakai_placeholder:
-            self._foto_umum.setText("belum dipilih — memakai placeholder")
-            self._foto_umum.setStyleSheet(_ABU)
-        else:
-            self._foto_umum.setText("belum dipilih")
-            self._foto_umum.setStyleSheet(_MERAH)
+        if self._foto_umum.berkas() != self._assets.foto_umum:
+            self._foto_umum.set_berkas(self._assets.foto_umum)
 
         if self._pakai_ph.isChecked() != self._assets.pakai_placeholder:
             self._pakai_ph.blockSignals(True)
@@ -286,26 +382,26 @@ class AssetsPanel(QWidget):
             self._pakai_ph.blockSignals(False)
 
         punya_baris = self._baris is not None
-        self._btn_foto_baris.setEnabled(punya_baris)
-        self._btn_hapus_baris.setEnabled(punya_baris)
+        self._foto_khusus.set_dapat_diubah(punya_baris)
         if punya_baris:
             self._label_khusus.setText(
                 f"Foto khusus baris {self._baris}"
                 + (f" ({self._nama_baris[:28]})" if self._nama_baris else "")
             )
             khusus = self._assets.foto_baris.get(self._baris, [])
+            if self._foto_khusus.berkas() != khusus:
+                self._foto_khusus.set_berkas(khusus)
             if khusus:
-                teks = self._daftar(khusus, FOTO_EXT)
+                catatan = ""
             elif self._assets.baris_pakai_placeholder(self._baris):
-                teks = "memakai placeholder"
+                catatan = "belum ada foto khusus — baris ini memakai placeholder"
             else:
-                teks = "memakai foto umum"
-            self._foto_khusus.setText(teks)
-            self._foto_khusus.setStyleSheet(_HIJAU if khusus else _ABU)
+                catatan = "belum ada foto khusus — baris ini memakai foto umum"
+            self._catatan_khusus.setText(catatan)
         else:
             self._label_khusus.setText("Foto khusus baris terpilih")
-            self._foto_khusus.setText("pilih satu baris di tabel dulu")
-            self._foto_khusus.setStyleSheet(_ABU)
+            self._foto_khusus.set_berkas([])
+            self._catatan_khusus.setText("pilih satu baris di tabel dulu")
 
         galat_video = periksa(self._assets.video, VIDEO_EXT) if self._assets.video else ""
         self._video_label.setText(

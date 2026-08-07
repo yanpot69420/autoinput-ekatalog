@@ -271,3 +271,53 @@ def test_placeholder_ikut_tersimpan(tmp_path, berkas):
 
     Assets().save(book)
     assert Assets.load(book).pakai_placeholder is True
+
+
+# --- menghapus berkas -------------------------------------------------------
+
+
+def test_hapus_satu_foto_tidak_menghapus_sisanya():
+    """Salah pilih satu dari lima tidak boleh memaksa memilih ulang kelimanya."""
+    a = Assets(foto_umum=["a.jpg", "b.jpg", "c.jpg"])
+    a.hapus_foto("b.jpg")
+    assert a.foto_umum == ["a.jpg", "c.jpg"]
+
+
+def test_hapus_foto_baris_hanya_menyentuh_baris_itu():
+    a = Assets(foto_baris={5: ["a.jpg", "b.jpg"], 6: ["c.jpg"]})
+    a.hapus_foto("a.jpg", excel_row=5)
+    assert a.foto_baris[5] == ["b.jpg"]
+    assert a.foto_baris[6] == ["c.jpg"]
+
+
+def test_baris_tanpa_foto_tersisa_dilepas_dari_daftar():
+    """Daftar kosong berarti baris itu kembali memakai foto umum."""
+    a = Assets(foto_baris={5: ["a.jpg"]})
+    a.hapus_foto("a.jpg", excel_row=5)
+    assert 5 not in a.foto_baris
+
+
+def test_hapus_foto_yang_tidak_ada_tidak_mengubah_apa_pun():
+    a = Assets(foto_umum=["a.jpg"])
+    a.hapus_foto("entah.jpg")
+    assert a.foto_umum == ["a.jpg"]
+
+
+def test_kosongkan_melepas_semua_berkas():
+    a = Assets(dokumen={"SBU": "s.pdf"}, foto_umum=["a.jpg"],
+               foto_baris={5: ["b.jpg"]}, video="v.mp4", video_url="https://x")
+    a.kosongkan()
+    assert a.kosong
+    assert not a.dokumen and not a.foto_umum and not a.foto_baris
+    assert a.video == "" and a.video_url == ""
+
+
+def test_kosongkan_tidak_mengubah_setelan_placeholder():
+    """Setelan itu preferensi kerja, bukan berkas milik klien."""
+    a = Assets(foto_umum=["a.jpg"], pakai_placeholder=True)
+    a.kosongkan()
+    assert a.pakai_placeholder
+
+    b = Assets(foto_umum=["a.jpg"], pakai_placeholder=False)
+    b.kosongkan()
+    assert not b.pakai_placeholder
