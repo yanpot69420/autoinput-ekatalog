@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtGui import QColor, QFont
 
-from ..model import ProductRow, Status
+from ..model import ProductRow, Status, antrean
 
 COL_PENANDA = 0
 COL_BARIS = 1
@@ -135,7 +135,7 @@ class ProductTableModel(QAbstractTableModel):
 
     def pending_positions(self) -> list[int]:
         """Posisi baris yang siap dijalankan: belum sukses dan tanpa error."""
-        return [i for i, row in enumerate(self._rows) if row.siap]
+        return antrean(self._rows)
 
 
 __all__ = [

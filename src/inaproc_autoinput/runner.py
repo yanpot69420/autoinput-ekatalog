@@ -88,10 +88,74 @@ class Hasil:
     produk_id: str = ""
     langkah: list[str] = field(default_factory=list)
     peringatan: list[str] = field(default_factory=list)
+    # Dihentikan operator di tengah jalan. Bukan kegagalan: tidak ada yang
+    # salah dengan barisnya, jadi statusnya dikembalikan ke menunggu -- bukan
+    # gagal, yang akan membuatnya dilewati "Lanjutkan sisanya".
+    dibatalkan: bool = False
+
+
+@dataclass
+class Ringkasan:
+    """Hasil satu antrean, untuk dilaporkan setelah semuanya selesai."""
+
+    dikerjakan: int = 0
+    sukses: int = 0
+    terisi: int = 0
+    gagal: int = 0
+    sisa: int = 0            # sudah masuk antrean tapi belum sempat dikerjakan
+    dihentikan: bool = False  # operator menekan Berhenti
+    beruntun: bool = False    # dihentikan sendiri karena gagal berturut-turut
+    gagal_koneksi: str = ""   # browser tidak bisa disambung sejak awal
+
+    @property
+    def pesan(self) -> str:
+        if self.gagal_koneksi:
+            return f"Tidak ada baris yang dikerjakan — {self.gagal_koneksi.splitlines()[0]}"
+        bagian = [f"{self.dikerjakan} baris dikerjakan"]
+        if self.sukses:
+            bagian.append(f"{self.sukses} tersimpan")
+        if self.terisi:
+            bagian.append(f"{self.terisi} terisi, menunggu kamu menyimpan")
+        if self.gagal:
+            bagian.append(f"{self.gagal} gagal")
+        if self.sisa:
+            bagian.append(f"{self.sisa} belum dikerjakan")
+        return " · ".join(bagian)
+
+    @property
+    def alasan(self) -> str:
+        """Kenapa antrean berhenti, bila berhentinya bukan karena habis."""
+        if self.gagal_koneksi:
+            return self.gagal_koneksi
+        if self.beruntun:
+            return (
+                f"Berhenti sendiri setelah {BATAS_GAGAL_BERUNTUN} baris gagal "
+                "berturut-turut. Kegagalan sebanyak itu hampir selalu berarti "
+                "sesinya yang rusak — logout, portal bermasalah, atau halaman "
+                "berubah — bukan barisnya. Periksa Chrome dulu, baru lanjutkan."
+            )
+        if self.dihentikan:
+            return "Dihentikan atas permintaanmu."
+        return ""
+
+
+# Kegagalan beruntun sebanyak ini menghentikan antrean. Tiga baris gagal
+# berturut-turut hampir selalu berarti sesinya yang rusak, bukan tiga baris
+# yang kebetulan buruk -- meneruskannya cuma menambah 48 kegagalan yang sama
+# sambil menghabiskan waktu setengah menit per baris.
+BATAS_GAGAL_BERUNTUN = 3
 
 
 class RunnerError(RuntimeError):
     """Kegagalan yang sudah dijelaskan dengan bahasa manusia."""
+
+
+class Dibatalkan(Exception):
+    """Operator menekan Berhenti di tengah pengisian.
+
+    Bukan turunan RunnerError: ini bukan kegagalan, dan tidak boleh ikut
+    tertangkap oleh penanganan galat biasa yang akan menandai barisnya gagal.
+    """
 
 
 def _teks(nilai) -> str:
@@ -107,15 +171,24 @@ def _angka(nilai) -> str:
 class ProductFormFiller:
     """Mengisi satu halaman tambah produk. Dipisah dari koneksi agar bisa diuji."""
 
-    def __init__(self, page, catatan=None):
+    def __init__(self, page, catatan=None, batal=None):
         self.page = page
         self.langkah: list[str] = []
         self.peringatan: list[str] = []
         self._catatan = catatan or (lambda pesan: None)
+        # Dipanggil di sela-sela langkah. Playwright versi sinkron tidak bisa
+        # diputus dari luar, jadi berhentinya diperiksa di antara langkah --
+        # jeda paling lama satu langkah, bukan satu baris penuh.
+        self._batal = batal or (lambda: False)
+
+    def periksa_batal(self) -> None:
+        if self._batal():
+            raise Dibatalkan()
 
     def _catat(self, pesan: str) -> None:
         self.langkah.append(pesan)
         self._catatan(pesan)
+        self.periksa_batal()
 
     # --- primitif -----------------------------------------------------------
 
@@ -270,6 +343,7 @@ class ProductFormFiller:
     # --- alur utama ---------------------------------------------------------
 
     def isi(self, data: dict, assets: Assets | None = None) -> None:
+        self.periksa_batal()
         assets = assets or Assets()
         foto = assets.foto_untuk(int(data.get("_row") or 0))
 
@@ -352,6 +426,9 @@ class ProductFormFiller:
     # --- penyimpanan --------------------------------------------------------
 
     def simpan(self, mode: Mode) -> str:
+        # Diperiksa sebelum tombolnya disentuh: berhenti yang datang sedetik
+        # sebelum klik tidak boleh berujung produk yang tetap tersimpan.
+        self.periksa_batal()
         if mode is Mode.ISI_SAJA:
             self._catat("Berhenti sebelum menyimpan — silakan periksa lalu klik sendiri")
             return ""
@@ -425,15 +502,22 @@ class BrowserRunner:
         )
 
     def jalankan(self, data: dict, mode: Mode = Mode.ISI_SAJA, catatan=None,
-                 assets: Assets | None = None) -> Hasil:
+                 assets: Assets | None = None, batal=None) -> Hasil:
         if not self.siap():
             return Hasil(False, "Browser belum tersambung")
 
-        pengisi = ProductFormFiller(self.page, catatan)
+        pengisi = ProductFormFiller(self.page, catatan, batal)
         try:
+            pengisi.periksa_batal()
             self.buka_form()
             pengisi.isi(data, assets)
             produk_id = pengisi.simpan(mode)
+        except Dibatalkan:
+            # Bukan gagal: form tertinggal separuh terisi, tapi tidak ada apa
+            # pun yang masuk ke portal, dan baris berikutnya memuat ulang
+            # halaman ini dari awal.
+            return Hasil(False, "dihentikan sebelum selesai", dibatalkan=True,
+                         langkah=pengisi.langkah, peringatan=pengisi.peringatan)
         except RunnerError as error:
             return Hasil(False, str(error), langkah=pengisi.langkah,
                          peringatan=pengisi.peringatan)
@@ -457,11 +541,14 @@ class BrowserRunner:
 
 
 __all__ = [
+    "BATAS_GAGAL_BERUNTUN",
     "BrowserRunner",
     "CDP_DEFAULT",
+    "Dibatalkan",
     "Hasil",
     "Mode",
     "ProductFormFiller",
+    "Ringkasan",
     "RunnerError",
     "URL_TAMBAH",
 ]

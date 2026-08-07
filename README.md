@@ -19,13 +19,13 @@ Level 3** — Bina Marga saja 68 file, Cipta Karya 66 file, dengan susunan kolom
 yang berbeda-beda. Template universal di sini menggantikan semuanya dengan satu
 lembar.
 
-## Status: Tahap 2 selesai
+## Status: Tahap 3 selesai
 
 | Tahap | Isi | Status |
 |---|---|---|
 | 1 | Jendela, template Excel, baca file, validasi, penanda baris | **Selesai** |
 | 2 | Isi satu baris ke portal | **Selesai** |
-| 3 | Jalankan semua, lanjutkan sisanya, berhenti di tengah | Belum |
+| 3 | Jalankan semua, lanjutkan sisanya, berhenti di tengah | **Selesai** |
 | 4 | Varian, harga grosir, TKDN/SNI/Merek | Belum |
 
 ## Tiga tingkat tindakan
@@ -47,6 +47,49 @@ lebih dulu. Untuk produk pertama, pakai mode bawaan.
 
 Panel rincian menampilkan langkah demi langkah apa yang diisi, plus peringatan
 untuk atribut atau dokumen yang tidak ada di kategori tersebut.
+
+## Menjalankan banyak baris
+
+| Tombol | Yang dikerjakan |
+|---|---|
+| **Jalankan baris ini** | Hanya baris yang dipilih |
+| **Jalankan semua** | Semua baris siap, dari atas — termasuk mengulang yang **Gagal** |
+| **Lanjutkan sisanya** | Sama, tapi baris **Gagal** dilewati |
+| **Berhenti** | Hentikan antrean |
+
+Dua hal tidak pernah masuk antrean, apa pun tombolnya. Baris **Sukses**:
+mengulangnya membuat produk *kedua* di portal, bukan memperbarui yang pertama,
+dan itu tidak bisa dibatalkan dari sini. Baris yang masih punya **error**: sudah
+pasti ditolak, dan menghabiskan setengah menit masing-masing untuk
+membuktikannya.
+
+Bedanya dua tombol antrean cuma pada baris yang gagal. Baris gagal umumnya perlu
+diperbaiki dulu — mengulangnya apa adanya menghasilkan kegagalan yang sama.
+Baris **Terisi** ikut di keduanya, karena belum ada apa pun yang masuk ke portal.
+
+Satu sambungan browser dipakai untuk seluruh antrean, dan **status disimpan tiap
+baris selesai**, bukan di akhir. Aplikasi yang mati di baris ke-40 tidak
+menghapus 39 baris sebelumnya.
+
+### Berhenti di tengah
+
+Playwright versi sinkron tidak bisa diputus dari luar, jadi berhentinya
+diperiksa di sela-sela langkah: jedanya paling lama satu langkah, bukan satu
+baris penuh. Form di portal tertinggal separuh terisi — tidak apa-apa, tidak ada
+yang tersimpan dan baris berikutnya memuat ulang halamannya.
+
+Baris yang diputus dikembalikan ke **Menunggu**, bukan Gagal. Tidak ada yang
+salah dengan barisnya, dan menandainya gagal akan membuat "Lanjutkan sisanya"
+melewatinya. Berhenti yang datang sedetik sebelum tombol Simpan diklik tetap
+membatalkan kliknya.
+
+### Berhenti sendiri
+
+Tiga baris gagal berturut-turut menghentikan antrean. Kegagalan sebanyak itu
+hampir selalu berarti sesinya yang rusak — logout, portal bermasalah, halaman
+berubah — bukan tiga baris yang kebetulan buruk. Meneruskannya cuma menambah 48
+kegagalan yang sama sambil menghabiskan setengah menit per baris. Kegagalan yang
+diselingi keberhasilan tidak dihitung beruntun.
 
 ## Menjalankan
 
@@ -90,12 +133,12 @@ Berkas `.bat` itu memakai `pythonw.exe` supaya jendela Command Prompt tidak
 ikut muncul, dan path-nya relatif terhadap letak berkasnya sendiri — folder
 proyek boleh dipindah tanpa mengubah apa pun.
 
-Yang **belum diuji di Windows**: seluruh aplikasi ini dikembangkan dan
-dijalankan di macOS. Lapisan yang berbeda perilakunya sudah ditangani —
-lokasi Chrome termasuk pemasangan per-pengguna di `%LOCALAPPDATA%`, dan cara
-melepas proses Chrome supaya tidak ikut mati (`creationflags`, karena
-`start_new_session` diabaikan diam-diam di Windows). Tapi keduanya baru diuji
-lewat simulasi, bukan di mesin Windows sungguhan.
+Sudah dijalankan di Windows 10 (Python 3.12, Chrome 151): seluruh uji lulus,
+termasuk uji pengisi form yang menempel ke Chrome sungguhan lewat port debug.
+Dua lapisan yang perilakunya berbeda dari macOS ikut terbukti di sana — deteksi
+lokasi Chrome, dan cara melepas prosesnya supaya tidak ikut mati saat aplikasi
+ditutup (`creationflags`, karena `start_new_session` diabaikan diam-diam di
+Windows).
 
 Ikon `.app` hanya untuk macOS; `.bat` di Windows memakai ikon bawaan.
 
@@ -277,6 +320,13 @@ dilewati bila Chrome dengan port debug belum berjalan:
 
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/.inaproc-chrome-uji"
+```
+
+Di Windows, cara paling ringkas adalah memakai pembuka milik aplikasi sendiri —
+sekalian menguji deteksi lokasi Chrome di mesin itu:
+
+```bash
+.venv\Scripts\python -c "from inaproc_autoinput import chrome; print(chrome.launch())"
 ```
 
 ## Catatan

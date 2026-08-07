@@ -107,4 +107,26 @@ def rows_from_records(records: list[dict]) -> list[ProductRow]:
     return [ProductRow(excel_row=r.get("_row", 0), data=r) for r in records]
 
 
-__all__ = ["ProductRow", "Status", "rows_from_records"]
+def antrean(rows: list[ProductRow], lewati_gagal: bool = False) -> list[int]:
+    """Posisi baris yang akan dikerjakan sebuah antrean.
+
+    Dua hal selalu dilewati, apa pun tombolnya:
+
+    * **Sukses** -- mengulangnya membuat produk *kedua* di portal, bukan
+      memperbarui yang pertama. Ini tidak bisa dibatalkan dari sini.
+    * **Baris ber-error** -- sudah pasti ditolak, dan menghabiskan setengah
+      menit masing-masing untuk membuktikannya.
+
+    `lewati_gagal` yang membedakan dua tombol: "Jalankan semua" mengulang baris
+    yang gagal, "Lanjutkan sisanya" tidak. Baris yang gagal umumnya perlu
+    diperbaiki dulu -- mengulangnya apa adanya cuma menghasilkan kegagalan yang
+    sama. Baris **Terisi** ikut di keduanya: belum ada apa pun yang masuk ke
+    portal, jadi pekerjaannya belum selesai.
+    """
+    return [
+        i for i, row in enumerate(rows)
+        if row.siap and not (lewati_gagal and row.status is Status.GAGAL)
+    ]
+
+
+__all__ = ["ProductRow", "Status", "antrean", "rows_from_records"]

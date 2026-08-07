@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 
 from .. import state, workbook
 from ..categories import Catalog
-from ..model import Status, rows_from_records
+from ..model import Status, antrean, rows_from_records
 from .. import chrome
 from ..assets import Assets
 from ..runner import CDP_DEFAULT, URL_TAMBAH, Mode
@@ -37,13 +37,6 @@ from .table_model import COL_NAMA, COL_PESAN, ProductTableModel
 from .worker import RunWorker
 
 JUDUL = "INAPROC Autoinput — Katalog Elektronik v6"
-
-# Menjalankan banyak baris berurutan dikerjakan di Tahap 3.
-PESAN_TAHAP_3 = (
-    "Menjalankan banyak baris sekaligus belum tersedia.\n\n"
-    "Tahap 2 baru mencakup satu baris: pilih barisnya, lalu klik "
-    "'Jalankan baris ini'."
-)
 
 
 class MainWindow(QMainWindow):
@@ -56,6 +49,7 @@ class MainWindow(QMainWindow):
         self._model = ProductTableModel()
         self._worker: RunWorker | None = None
         self._aktif: int | None = None  # posisi baris yang sedang dijalankan
+        self._sedang_jalan = False
         # Cache dipakai saat mulai supaya jendela tidak menunggu jaringan.
         self._catalog = Catalog([])
 
@@ -97,9 +91,11 @@ class MainWindow(QMainWindow):
 
         buka = QPushButton("Buka template terisi…")
         buka.clicked.connect(self.open_workbook)
+        self._btn_buka = buka
 
         buat = QPushButton("Buat template kosong…")
         buat.clicked.connect(self.create_template)
+        self._btn_buat = buat
 
         muat_ulang = QPushButton("Muat ulang")
         muat_ulang.clicked.connect(self.reload_workbook)
@@ -109,6 +105,7 @@ class MainWindow(QMainWindow):
         kategori = QPushButton("Perbarui kategori")
         kategori.setToolTip("Unduh ulang daftar kategori dari portal INAPROC")
         kategori.clicked.connect(lambda: self._load_catalog(refresh=True))
+        self._btn_kategori = kategori
 
         uji = QPushButton("Uji koneksi browser")
         uji.setToolTip(f"Coba menyambung ke Chrome di {CDP_DEFAULT}")
@@ -176,16 +173,31 @@ class MainWindow(QMainWindow):
         bar.addWidget(self._mode)
 
         self._btn_satu = QPushButton("Jalankan baris ini")
-        self._btn_satu.setEnabled(False)
         self._btn_satu.clicked.connect(self.run_selected_row)
-        bar.addWidget(self._btn_satu)
 
         self._btn_semua = QPushButton("Jalankan semua")
+        self._btn_semua.setToolTip(
+            "Kerjakan semua baris siap dari atas, termasuk mengulang yang gagal"
+        )
+        self._btn_semua.clicked.connect(self.run_all)
+
         self._btn_sisa = QPushButton("Lanjutkan sisanya")
+        self._btn_sisa.setToolTip(
+            "Sama, tapi baris yang sudah gagal dilewati — biasanya perlu "
+            "diperbaiki dulu, bukan diulang apa adanya"
+        )
+        self._btn_sisa.clicked.connect(self.run_rest)
+
         self._btn_stop = QPushButton("Berhenti")
-        for button in (self._btn_semua, self._btn_sisa, self._btn_stop):
+        self._btn_stop.setToolTip(
+            "Hentikan antrean. Baris yang sedang diisi diputus di langkah "
+            "berikutnya dan dikembalikan ke Menunggu"
+        )
+        self._btn_stop.clicked.connect(self.stop_queue)
+
+        for button in (self._btn_satu, self._btn_semua, self._btn_sisa,
+                       self._btn_stop):
             button.setEnabled(False)
-            button.clicked.connect(self._not_yet)
             bar.addWidget(button)
 
         bar.addStretch(1)
@@ -319,9 +331,6 @@ class MainWindow(QMainWindow):
         note = f" · {restored} baris memulihkan status sebelumnya" if restored else ""
         self.statusBar().showMessage(f"{len(rows)} baris dibaca{note}", 8000)
 
-    def _not_yet(self) -> None:
-        QMessageBox.information(self, "Belum tersedia", PESAN_TAHAP_3)
-
     # --- menjalankan ke portal ---------------------------------------------
 
     def test_connection(self) -> None:
@@ -329,37 +338,95 @@ class MainWindow(QMainWindow):
 
     def run_selected_row(self) -> None:
         posisi = self._selected_position()
-        row = self._model.row_at(posisi) if posisi is not None else None
-        if row is None:
+        if posisi is not None and self._model.row_at(posisi) is not None:
+            self._mulai_antrean([posisi], "baris ini")
+
+    def run_all(self) -> None:
+        self._mulai_antrean(antrean(self._model.rows()), "semua baris")
+
+    def run_rest(self) -> None:
+        self._mulai_antrean(antrean(self._model.rows(), lewati_gagal=True),
+                            "sisanya")
+
+    def stop_queue(self) -> None:
+        if self._worker is None or not self._worker.isRunning():
+            return
+        self._worker.stop()
+        self._btn_stop.setEnabled(False)
+        self.statusBar().showMessage(
+            "Menghentikan… baris yang sedang diisi diputus di langkah berikutnya"
+        )
+
+    def _mulai_antrean(self, posisi: list[int], sebutan: str) -> None:
+        if not posisi:
+            QMessageBox.information(self, "Tidak ada yang dikerjakan",
+                                    self._kenapa_kosong())
+            return
+        if not self._konfirmasi_antrean(posisi, sebutan):
             return
 
-        mode: Mode = self._mode.currentData()
-        if mode is not Mode.ISI_SAJA:
-            jawab = QMessageBox.question(
-                self, "Konfirmasi",
-                f"Baris {row.excel_row} — {row.nama}\n\n"
-                f"Setelah form terisi, aplikasi akan: {mode.label}.\n"
-                "Tindakan ini mengubah data di akun penyedia. Lanjutkan?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        jobs = [(p, dict(self._model.row_at(p).data)) for p in posisi]
+        awalan = "Menjalankan" if len(jobs) == 1 else f"Menjalankan {len(jobs)} baris"
+        self._mulai_worker(jobs, f"{awalan} — menyambung ke browser…")
+
+    def _kenapa_kosong(self) -> str:
+        """Kosongnya antrean punya beberapa sebab, dan bedanya penting."""
+        rows = self._model.rows()
+        if not rows:
+            return "Belum ada file template dibuka."
+        counts = self._model.tally()
+        bermasalah = sum(1 for row in rows if row.blocking_issues)
+        if counts[Status.SUKSES] == len(rows):
+            return "Semua baris sudah sukses. Tidak ada yang tersisa."
+        if bermasalah:
+            return (
+                f"{bermasalah} baris masih punya error dan tidak bisa dijalankan. "
+                "Klik barisnya untuk melihat apa yang harus diperbaiki, betulkan "
+                "di Excel, lalu 'Muat ulang'."
             )
-            if jawab != QMessageBox.Yes:
-                return
+        return (
+            f"Tidak ada baris yang perlu dikerjakan. {counts[Status.GAGAL]} baris "
+            "gagal dilewati oleh 'Lanjutkan sisanya' — pakai 'Jalankan semua' "
+            "bila memang ingin mengulangnya."
+        )
 
-        row.status = Status.BERJALAN
-        row.message = "menyiapkan…"
-        self._model.set_active(posisi)
-        self._model.refresh(posisi)
-        self._aktif = posisi
-        self._mulai_worker(dict(row.data), f"Menjalankan baris {row.excel_row}…")
+    def _konfirmasi_antrean(self, posisi: list[int], sebutan: str) -> bool:
+        """Konfirmasi sebelum antrean jalan. Selalu untuk mode yang menyimpan."""
+        mode: Mode = self._mode.currentData()
+        catatan = list(self._assets_panel.assets().catatan())
+        berkas = self._assets_panel.assets().masalah()
 
-    def _mulai_worker(self, data: dict | None, pesan: str) -> None:
+        if mode is Mode.ISI_SAJA and not berkas:
+            return True
+
+        garis = [f"{len(posisi)} baris akan dikerjakan ({sebutan}).",
+                 f"Setelah tiap form terisi, aplikasi akan: {mode.label}."]
+        if mode is not Mode.ISI_SAJA:
+            garis.append("Tindakan ini mengubah data di akun penyedia.")
+        if berkas:
+            garis += ["", f"Berkas yang perlu dibereskan ({len(berkas)}):"]
+            garis += [f"  • {p}" for p in berkas[:5]]
+        if catatan and mode is not Mode.ISI_SAJA:
+            garis += [""] + [f"! {c}" for c in catatan]
+        garis += ["", "Lanjutkan?"]
+
+        jawab = QMessageBox.question(
+            self, "Konfirmasi", "\n".join(garis),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        return jawab == QMessageBox.Yes
+
+    def _mulai_worker(self, jobs: list[tuple[int, dict]] | None, pesan: str) -> None:
         self._set_sedang_jalan(True)
         self.statusBar().showMessage(pesan)
 
-        self._worker = RunWorker(data, self._mode.currentData(), CDP_DEFAULT,
+        self._worker = RunWorker(jobs, self._mode.currentData(), CDP_DEFAULT,
                                  self._assets_panel.assets(), self)
         self._worker.langkah.connect(self._on_langkah)
-        self._worker.selesai.connect(self._on_selesai)
+        self._worker.mulai.connect(self._on_mulai)
+        self._worker.hasil.connect(self._on_hasil)
+        self._worker.tuntas.connect(self._on_tuntas)
+        self._worker.koneksi.connect(self._on_koneksi)
         self._worker.finished.connect(lambda: self._set_sedang_jalan(False))
         self._worker.start()
 
@@ -372,42 +439,89 @@ class MainWindow(QMainWindow):
             row.message = pesan
             self._model.refresh(self._aktif)
 
-    def _on_selesai(self, hasil) -> None:
-        if self._aktif is None:  # hasil uji koneksi
-            judul = "Koneksi berhasil" if hasil.berhasil else "Koneksi gagal"
-            kotak = QMessageBox.information if hasil.berhasil else QMessageBox.warning
-            kotak(self, judul, hasil.pesan)
-            self.statusBar().showMessage(hasil.pesan, 10_000)
+    def _on_mulai(self, posisi: int) -> None:
+        row = self._model.row_at(posisi)
+        if row is None:
+            return
+        row.status = Status.BERJALAN
+        row.message = "menyiapkan…"
+        self._aktif = posisi
+        self._model.set_active(posisi)
+        # Antrean panjang akan melewati batas layar; barisnya diikuti supaya
+        # yang sedang dikerjakan selalu terlihat.
+        self._table.scrollTo(self._model.index(posisi, 0))
+
+    def _on_hasil(self, posisi: int, hasil) -> None:
+        self._aktif = None
+        row = self._model.row_at(posisi)
+        if row is None:
             return
 
-        posisi, self._aktif = self._aktif, None
-        row = self._model.row_at(posisi)
-        if row is not None:
-            # "Isi saja" berhasil tanpa menyimpan apa pun. Menandainya Sukses
-            # akan membuat baris ini dilewati nanti, padahal produknya belum
-            # pernah masuk ke portal.
-            if not hasil.berhasil:
-                row.status = Status.GAGAL
-            elif hasil.tersimpan:
-                row.status = Status.SUKSES
-            else:
-                row.status = Status.TERISI
-            row.message = hasil.pesan
-            row.produk_id = hasil.produk_id or row.produk_id
-            if hasil.peringatan:
-                row.message += f" · {len(hasil.peringatan)} peringatan"
-            self._model.refresh(posisi)
-            if self._workbook_path:
-                state.save(self._workbook_path, self._model.rows())
+        # "Isi saja" berhasil tanpa menyimpan apa pun. Menandainya Sukses akan
+        # membuat baris ini dilewati nanti, padahal produknya belum pernah
+        # masuk ke portal. Baris yang dihentikan juga bukan gagal: tidak ada
+        # yang salah dengannya, jadi dikembalikan ke menunggu.
+        if hasil.dibatalkan:
+            row.status = Status.MENUNGGU
+        elif not hasil.berhasil:
+            row.status = Status.GAGAL
+        elif hasil.tersimpan:
+            row.status = Status.SUKSES
+        else:
+            row.status = Status.TERISI
 
+        row.message = hasil.pesan
+        row.produk_id = hasil.produk_id or row.produk_id
+        if hasil.peringatan:
+            row.message += f" · {len(hasil.peringatan)} peringatan"
+        self._model.refresh(posisi)
+
+        # Disimpan tiap baris, bukan di akhir antrean: kalau aplikasi mati di
+        # baris ke-40, 39 baris sebelumnya tidak boleh ikut hilang.
+        if self._workbook_path:
+            state.save(self._workbook_path, self._model.rows())
+
+        self._detail.setPlainText(self._laporan(hasil, row))
+        self._update_summary()
+
+    def _on_tuntas(self, ringkasan) -> None:
+        self._aktif = None
         self._model.set_active(None)
         self._update_summary()
-        self._detail.setPlainText(self._laporan(hasil))
+
+        macet = bool(ringkasan.beruntun or ringkasan.gagal_koneksi)
+        kotak = QMessageBox.warning if macet else QMessageBox.information
+        kotak(self, "Antrean berhenti" if macet else "Antrean selesai",
+              self._pesan_tuntas(ringkasan))
+        self.statusBar().showMessage(ringkasan.pesan, 15_000)
+
+    @staticmethod
+    def _pesan_tuntas(ringkasan) -> str:
+        garis = [ringkasan.pesan]
+        if ringkasan.alasan:
+            garis += ["", ringkasan.alasan]
+        # Menawarkan "Lanjutkan sisanya" saat browsernya yang mati cuma
+        # memutar-mutar operator ke kegagalan yang sama.
+        if ringkasan.sisa and not ringkasan.gagal_koneksi:
+            garis += ["", "Klik 'Lanjutkan sisanya' untuk meneruskan."]
+        return "\n".join(garis)
+
+    def _on_koneksi(self, hasil) -> None:
+        judul = "Koneksi berhasil" if hasil.berhasil else "Koneksi gagal"
+        kotak = QMessageBox.information if hasil.berhasil else QMessageBox.warning
+        kotak(self, judul, hasil.pesan)
         self.statusBar().showMessage(hasil.pesan, 10_000)
 
     @staticmethod
-    def _laporan(hasil) -> str:
-        baris = [("BERHASIL" if hasil.berhasil else "GAGAL") + f" — {hasil.pesan}", ""]
+    def _laporan(hasil, row=None) -> str:
+        if hasil.dibatalkan:
+            kepala = "DIHENTIKAN"
+        else:
+            kepala = "BERHASIL" if hasil.berhasil else "GAGAL"
+        judul = f"{kepala} — {hasil.pesan}"
+        if row is not None:
+            judul = f"Baris {row.excel_row} · {judul}"
+        baris = [judul, ""]
         if hasil.produk_id:
             baris += [f"ID produk: {hasil.produk_id}", ""]
         if hasil.langkah:
@@ -419,10 +533,28 @@ class MainWindow(QMainWindow):
         return "\n".join(baris)
 
     def _set_sedang_jalan(self, jalan: bool) -> None:
-        self._btn_uji.setEnabled(not jalan)
-        self._btn_satu.setEnabled(not jalan and self._baris_siap())
+        """Kunci semua yang bisa menggeser tanah di bawah antrean yang berjalan.
+
+        Memuat ulang file di tengah antrean akan mengganti daftar barisnya,
+        sementara worker masih memegang posisi baris dari daftar yang lama.
+        """
+        self._sedang_jalan = jalan
+        for tombol in (self._btn_uji, self._btn_buka, self._btn_buat,
+                       self._btn_kategori):
+            tombol.setEnabled(not jalan)
         self._mode.setEnabled(not jalan)
         self._reload_button.setEnabled(not jalan and self._workbook_path is not None)
+        self._btn_stop.setEnabled(jalan)
+        self._perbarui_tombol()
+
+    def _perbarui_tombol(self) -> None:
+        jalan = getattr(self, "_sedang_jalan", False)
+        rows = self._model.rows()
+        self._btn_satu.setEnabled(not jalan and self._baris_siap())
+        self._btn_semua.setEnabled(not jalan and bool(antrean(rows)))
+        self._btn_sisa.setEnabled(
+            not jalan and bool(antrean(rows, lewati_gagal=True))
+        )
 
     def _selected_position(self) -> int | None:
         indexes = self._table.selectionModel().selectedRows()
@@ -440,18 +572,19 @@ class MainWindow(QMainWindow):
         if not indexes:
             self._detail.clear()
             self._assets_panel.set_baris(None)
+            self._perbarui_tombol()
             return
         row = self._model.row_at(indexes[0].row())
         if row:
             self._detail.setPlainText(self._describe(row))
             self._assets_panel.set_baris(row.excel_row, row.nama)
+        self._perbarui_tombol()
 
     def _on_assets_changed(self) -> None:
         """Simpan pilihan berkas di sebelah workbook, lalu perbarui ringkasan."""
         if self._workbook_path:
             self._assets_panel.assets().save(self._workbook_path)
         self._update_summary()
-        self._btn_satu.setEnabled(self._baris_siap())
 
     def _describe(self, row) -> str:
         lines = [
@@ -513,11 +646,34 @@ class MainWindow(QMainWindow):
             f"{belum_disimpan} · {siap} siap dijalankan · "
             f"{bermasalah} perlu diperbaiki{catatan}"
         )
+        self._perbarui_tombol()
 
     def _set_connection_status(self, connected: bool) -> None:
         self.statusBar().showMessage(
             "Siap. Buka file template, pilih satu baris, lalu 'Jalankan baris ini'."
         )
+
+    # --- penutupan ----------------------------------------------------------
+
+    def closeEvent(self, event) -> None:
+        """Jangan biarkan antrean mati bersama jendelanya tanpa ditanya.
+
+        Menutup jendela di tengah antrean meninggalkan satu baris berstatus
+        'berjalan' di berkas status. Baris itu memang dipulihkan ke menunggu
+        saat file dibuka lagi, tapi keputusannya tetap milik operator.
+        """
+        if self._worker is not None and self._worker.isRunning():
+            jawab = QMessageBox.question(
+                self, "Antrean masih berjalan",
+                "Baris masih dikerjakan. Hentikan antreannya dan tutup aplikasi?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if jawab != QMessageBox.Yes:
+                event.ignore()
+                return
+            self._worker.stop()
+            self._worker.wait(20_000)
+        super().closeEvent(event)
 
 
 __all__ = ["MainWindow"]

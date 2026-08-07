@@ -25,6 +25,7 @@ from inaproc_autoinput.assets import Assets
 from inaproc_autoinput.runner import (
     CDP_DEFAULT,
     BrowserRunner,
+    Dibatalkan,
     Mode,
     ProductFormFiller,
     RunnerError,
@@ -74,6 +75,28 @@ def test_connect_gagal_memberi_petunjuk():
     runner = BrowserRunner("http://localhost:59999")
     with pytest.raises(RunnerError, match="remote-debugging-port"):
         runner.connect()
+
+
+def test_jalankan_yang_dibatalkan_bukan_kegagalan():
+    """Berhenti diperiksa sebelum halaman disentuh sama sekali.
+
+    Yang dijaga di sini bukan pesannya, tapi `tersimpan`: apa pun yang terjadi,
+    baris yang dihentikan tidak boleh dilaporkan sebagai sudah masuk portal.
+    """
+
+    class PageDiam:
+        def is_closed(self) -> bool:
+            return False
+
+    runner = BrowserRunner()
+    runner.page = PageDiam()
+    hasil = runner.jalankan({"kategori": "A > B > C"}, Mode.SIMPAN,
+                            batal=lambda: True)
+
+    assert hasil.dibatalkan
+    assert not hasil.berhasil
+    assert not hasil.tersimpan
+    assert hasil.langkah == []  # tidak satu langkah pun sempat jalan
 
 
 # --- pengisian terhadap halaman tiruan --------------------------------------
@@ -342,3 +365,57 @@ def test_hasil_membedakan_terisi_dari_tersimpan(runner, halaman, berkas,
     assert hasil.berhasil, hasil.pesan
     assert hasil.tersimpan is tersimpan
     assert ("tersimpan" if tersimpan else "menunggu kamu menyimpan") in hasil.pesan
+
+
+# --- berhenti di tengah antrean ---------------------------------------------
+
+
+@pytestmark_browser
+def test_berhenti_memutus_di_tengah_pengisian(halaman, berkas):
+    """Playwright sinkron tidak bisa diputus dari luar.
+
+    Berhentinya karena itu diperiksa di sela-sela langkah: jedanya paling lama
+    satu langkah, bukan satu baris penuh yang makan setengah menit.
+    """
+    langkah: list[str] = []
+    pengisi = ProductFormFiller(halaman, langkah.append,
+                                batal=lambda: len(langkah) >= 3)
+
+    with pytest.raises(Dibatalkan):
+        pengisi.isi(_baris(berkas), _assets(berkas))
+
+    assert len(pengisi.langkah) == 3
+    # Form tertinggal separuh terisi -- itu memang konsekuensinya, dan tidak
+    # apa-apa: tidak ada yang tersimpan, dan baris berikutnya memuat ulang.
+    assert halaman.locator("#form-product-price-input").input_value() == ""
+
+
+@pytestmark_browser
+def test_berhenti_tidak_jadi_mengklik_simpan(halaman):
+    """Berhenti yang datang sedetik sebelum klik tidak boleh tetap menyimpan."""
+    pengisi = ProductFormFiller(halaman, batal=lambda: True)
+
+    with pytest.raises(Dibatalkan):
+        pengisi.simpan(Mode.SIMPAN_DRAF)
+
+    assert halaman.locator("#hasil").inner_text() == ""
+
+
+@pytestmark_browser
+def test_jalankan_melaporkan_dibatalkan_bukan_gagal(runner, halaman, berkas,
+                                                    monkeypatch):
+    monkeypatch.setattr(runner, "buka_form", lambda: None)
+    hitung = {"n": 0}
+
+    def batal() -> bool:
+        hitung["n"] += 1
+        return hitung["n"] > 4
+
+    hasil = runner.jalankan(_baris(berkas), Mode.SIMPAN_DRAF,
+                            assets=_assets(berkas), batal=batal)
+
+    assert hasil.dibatalkan
+    assert not hasil.berhasil and not hasil.tersimpan
+    assert "dihentikan" in hasil.pesan
+    assert hasil.langkah, "langkah yang sempat jalan tetap dilaporkan"
+    assert halaman.locator("#hasil").inner_text() == ""
