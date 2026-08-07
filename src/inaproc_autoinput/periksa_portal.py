@@ -28,6 +28,50 @@ JUMLAH = 3
 # pengukuran saat portal sehat: form siap dalam 0,8 detik.
 BATAS_LAMBAT = 5.0
 
+# Kecepatan perender Chrome saat sehat, diukur pada halaman kosong -- tanpa
+# jaringan dan tanpa portal, jadi yang tersisa cuma Chrome-nya sendiri.
+SEHAT_JS = 8_100_000     # ribuan operasi dalam 400 ms
+SEHAT_FRAME = 8.3        # milidetik per frame
+# Chrome kadang meninggalkan proses perender yatim yang terus berputar tanpa
+# halaman apa pun -- terukur membakar 72% CPU dengan satu tab about:blank.
+# Akibatnya seluruh Chrome melambat dua sampai tiga kali lipat, di situs mana
+# pun. Di bawah/di atas ambang ini, yang bermasalah Chrome-nya, bukan portal.
+AMBANG_JS = SEHAT_JS * 0.6
+AMBANG_FRAME = SEHAT_FRAME * 1.7
+
+_UKUR_PERENDER = """() => {
+  let n = 0, t = performance.now();
+  while (performance.now() - t < 400) { for (let i = 0; i < 1000; i++) n += Math.sqrt(i); }
+  const js = Math.round(n / 1000);
+  return new Promise(res => {
+    const d = []; let a = performance.now(); const habis = a + 1500;
+    (function tick(now) { d.push(now - a); a = now;
+      now < habis ? requestAnimationFrame(tick) : res({js, frame: d}); })(a);
+  });
+}"""
+
+
+def chrome_melambat(js: int, frame: float) -> bool:
+    """Apakah Chrome sendiri yang melambat, terlepas dari portalnya.
+
+    Salah satu saja sudah cukup: pada kejadian nyata keduanya turun bersamaan,
+    tapi menuntut keduanya berarti melewatkan gejala yang baru mulai.
+    """
+    return js < AMBANG_JS or frame > AMBANG_FRAME
+
+
+def _ukur_perender(page) -> tuple[int, float]:
+    """Kecepatan Chrome sendiri, diukur di halaman kosong.
+
+    Sengaja bukan di halaman portal: kalau diukur di sana, Chrome yang lambat
+    dan portal yang berat tidak bisa dibedakan -- dan keduanya butuh tindakan
+    yang sama sekali berbeda.
+    """
+    page.goto("about:blank")
+    hasil = page.evaluate(_UKUR_PERENDER)
+    frame = sorted(x for x in hasil["frame"][2:] if x < 3000)
+    return hasil["js"], (st.median(frame) if frame else float("nan"))
+
 
 def _ukur(page) -> dict:
     catat: list = []
@@ -79,11 +123,24 @@ def main(argv: list[str] | None = None) -> int:
         # dimuat ulang cuma untuk diukur.
         page = konteks.new_page()
         try:
+            js, frame = _ukur_perender(page)
             hasil = [_ukur(page) for _ in range(JUMLAH)]
             halangan = penghalang(page)
         finally:
             page.close()
             browser.close()
+
+    print("Kecepatan Chrome sendiri, diukur di halaman kosong:\n")
+    print(f"  JS {js:,} kops (sehat ±{SEHAT_JS:,}) · "
+          f"frame {frame:.1f} ms (sehat ±{SEHAT_FRAME} ms)\n")
+
+    chrome_lambat = chrome_melambat(js, frame)
+    if chrome_lambat:
+        print("  ^ Chrome-nya sendiri yang melambat, bukan portal. Ini terjadi\n"
+              "    bila ada proses perender yang tersangkut dan terus berputar\n"
+              "    tanpa halaman — terukur membakar 72% CPU dengan satu tab\n"
+              "    kosong, dan memperlambat semua situs, bukan cuma portal.\n"
+              "    Klik 'Mulai ulang Chrome' di aplikasi. Sesi login tetap ada.\n")
 
     print(f"Portal diukur {JUMLAH} kali:\n")
     for nomor, h in enumerate(hasil, 1):
@@ -111,9 +168,12 @@ def main(argv: list[str] | None = None) -> int:
               f"padahal saat sehat sekitar 0,8 detik. Ini di sisi portal — tidak\n"
               "ada setelan di aplikasi yang bisa mempercepatnya. Tunda dulu, atau\n"
               "jalankan di jam yang lebih sepi.")
-    else:
+    elif chrome_lambat:
         print(f"Portal sehat: form siap dalam {st.median(siap):.1f} detik.\n"
-              "Kalau tetap terasa berat, yang melambat bukan portalnya —\n"
+              "Yang berat Chrome-nya — lihat catatan di atas: mulai ulang Chrome.")
+    else:
+        print(f"Portal sehat ({st.median(siap):.1f} detik) dan Chrome sehat.\n"
+              "Kalau tetap terasa berat, yang melambat di luar keduanya —\n"
               "catat jam kejadiannya dan jalankan ini lagi tepat saat itu.")
     return 0
 

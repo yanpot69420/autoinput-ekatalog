@@ -234,11 +234,26 @@ dan menyebutkannya, bukan menunggu sampai batas waktunya habis.
 Kalau ini berulang, ganti **Profil Chrome** ke *harian* (lihat di bawah) —
 penyebabnya memang dua profil memakai satu akun.
 
-**Chrome yang sudah lama hidup.** Terukur di rangkaian uji yang sama: 100 detik
-di Chrome yang sudah dipakai berjam-jam, 29 detik setelah Chrome dijalankan
-ulang — kode identik, dua kali pengukuran masing-masing. Kalau pengisian mulai
-terasa berat, klik **Mulai ulang Chrome**. Butuh sekitar satu detik, dan sesi
-loginmu tetap ada karena profilnya permanen.
+**Proses perender Chrome yang tersangkut.** Ini penyebab paling sering, dan
+paling menyesatkan: Chrome kadang meninggalkan proses perender yatim yang terus
+berputar tanpa halaman apa pun. Terukur membakar **72% CPU dengan satu tab
+`about:blank`**, dan yang melambat jadi *semua* situs — bukan cuma portal, jadi
+gampang dikira portalnya yang berat.
+
+Angkanya, diukur pada halaman lokal yang sama sebelum dan sesudah Chrome
+dijalankan ulang:
+
+| | tersangkut | setelah dijalankan ulang | sehat |
+|---|---|---|---|
+| Membangun DOM | 237 ms | 77 ms | 75 ms |
+| Kecepatan JS | 3,77 juta | 8,20 juta | 8,14 juta |
+| Waktu per frame | 16,7 ms | 8,3 ms | 8,3 ms |
+
+Hal yang sama terlihat di rangkaian uji: 100 detik jadi 29 detik.
+
+Obatnya satu klik — **Mulai ulang Chrome**. Butuh sekitar satu detik, dan sesi
+loginmu tetap ada karena profilnya permanen. `periksa_portal` mengenali kondisi
+ini sendiri dan menyebutkannya.
 
 Chrome ditutup lewat protokolnya sendiri (`Browser.close`), bukan dimatikan
 paksa. Bedanya penting: Chrome menuliskan cookie dan sesi ke profil saat keluar
