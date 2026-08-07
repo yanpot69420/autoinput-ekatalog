@@ -586,10 +586,14 @@ class BrowserRunner:
             self.close()
             raise RunnerError("Chrome tersambung tapi tidak punya jendela terbuka")
 
+        # Tab portal kalau ada; kalau tidak, tab baru -- bukan tab pertama yang
+        # kebetulan terbuka. Dengan profil Chrome harian, tab pertama itu bisa
+        # saja email atau pekerjaan lain, dan langkah berikutnya memuat halaman
+        # tambah produk di atasnya.
         self.page = next(
             (h for h in konteks.pages if "penyedia.inaproc.id" in h.url),
-            konteks.pages[0] if konteks.pages else konteks.new_page(),
-        )
+            None,
+        ) or konteks.new_page()
         return self
 
     def siap(self) -> bool:

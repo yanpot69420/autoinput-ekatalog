@@ -28,7 +28,7 @@ def test_port_bisa_diganti():
     assert "--remote-debugging-port=9333" in chrome.command(port=9333)
 
 
-def test_launch_selalu_membuka_alamat(monkeypatch):
+def test_launch_selalu_membuka_alamat(monkeypatch, tmp_path):
     """Chrome tanpa alamat tidak punya target yang bisa dikendalikan.
 
     Halaman tab baru tidak muncul di /json/list, jadi port debug hidup tapi
@@ -44,11 +44,13 @@ def test_launch_selalu_membuka_alamat(monkeypatch):
     monkeypatch.setattr(chrome, "find_chrome", lambda: Path("/bin/echo"))
     monkeypatch.setattr(chrome.subprocess, "Popen", palsu)
 
-    berhasil, _ = chrome.launch()
+    # Profil sendiri: profil nyata di home bisa sedang terkunci Chrome yang
+    # betulan berjalan, dan uji ini tidak sedang menguji itu.
+    berhasil, _ = chrome.launch(dir_profil=tmp_path)
     assert berhasil
     assert dijalankan["argumen"][-1] == chrome.URL_AWAL
 
-    chrome.launch(url="")  # url kosong pun tetap diberi alamat bawaan
+    chrome.launch(url="", dir_profil=tmp_path)  # url kosong tetap diberi bawaan
     assert dijalankan["argumen"][-1] == chrome.URL_AWAL
 
 
@@ -75,7 +77,7 @@ def test_is_listening_saat_port_mati():
     assert chrome.is_listening(port=59999, timeout=0.4) == ""
 
 
-def test_proses_chrome_dilepas_sesuai_sistem(monkeypatch):
+def test_proses_chrome_dilepas_sesuai_sistem(monkeypatch, tmp_path):
     """Chrome tidak boleh ikut mati saat jendela aplikasi ditutup.
 
     Caranya berbeda per sistem, dan bedanya diam-diam: `start_new_session`
@@ -96,7 +98,7 @@ def test_proses_chrome_dilepas_sesuai_sistem(monkeypatch):
         monkeypatch.setattr(chrome, "find_chrome", lambda: Path("/bin/echo"))
         monkeypatch.setattr(chrome.subprocess, "Popen", palsu)
 
-        berhasil, _ = chrome.launch()
+        berhasil, _ = chrome.launch(dir_profil=tmp_path)
         assert berhasil, platform
         assert kunci in dipakai, f"{platform} tidak memakai {kunci}"
 
@@ -144,3 +146,57 @@ def test_mulai_ulang_menutup_lalu_membuka(monkeypatch):
     berhasil, pesan = chrome.mulai_ulang()
     assert berhasil and urutan == ["tutup", "buka"]
     assert "Sesi loginmu tetap ada" in pesan
+
+
+# --- pilihan profil ---------------------------------------------------------
+
+
+def test_profil_terpisah_jadi_bawaan(tmp_path):
+    assert not chrome.pakai_harian(tmp_path / "belum-ada.json")
+    assert chrome.profil(harian=False) == chrome.PROFIL_APLIKASI
+    assert chrome.profil(harian=True) == chrome.PROFIL_HARIAN
+
+
+def test_pilihan_profil_tersimpan(tmp_path):
+    berkas = tmp_path / "chrome.json"
+    chrome.set_pakai_harian(True, berkas)
+    assert chrome.pakai_harian(berkas)
+    chrome.set_pakai_harian(False, berkas)
+    assert not chrome.pakai_harian(berkas)
+
+
+def test_pilihan_rusak_kembali_ke_profil_terpisah(tmp_path):
+    """Berkas cacat tidak boleh diam-diam memakai profil pribadi penyedia."""
+    berkas = tmp_path / "chrome.json"
+    berkas.write_text("{ bukan json", encoding="utf-8")
+    assert not chrome.pakai_harian(berkas)
+
+
+def test_symlink_kunci_yang_menggantung_tetap_terbaca_berjalan(tmp_path):
+    """SingletonLock menunjuk 'namahost-pid' yang memang tidak pernah ada.
+
+    Path.exists() mengikuti symlink itu, tidak menemukan apa-apa, lalu menjawab
+    'tidak berjalan' untuk Chrome yang jelas sedang berjalan -- dan Chrome baru
+    pun diluncurkan tanpa port debug yang pernah hidup.
+    """
+    (tmp_path / "SingletonLock").symlink_to("komputer-12345")
+    assert not (tmp_path / "SingletonLock").exists()   # menggantung, memang
+    assert chrome.sedang_berjalan(tmp_path)
+
+
+def test_profil_kosong_terbaca_tidak_berjalan(tmp_path):
+    assert not chrome.sedang_berjalan(tmp_path)
+
+
+def test_launch_menolak_bila_profilnya_sedang_dipakai(tmp_path):
+    """Chrome baru cuma menyerahkan alamat ke jendela lama lalu keluar."""
+    (tmp_path / "SingletonLock").symlink_to("komputer-12345")
+    berhasil, pesan = chrome.launch(port=59996, dir_profil=tmp_path)
+    assert not berhasil
+    assert "ditutup dulu sepenuhnya" in pesan
+    assert str(tmp_path) in pesan
+
+
+def test_perintah_memakai_profil_yang_diminta(tmp_path):
+    argumen = chrome.command(dir_profil=tmp_path)
+    assert f"--user-data-dir={tmp_path}" in argumen

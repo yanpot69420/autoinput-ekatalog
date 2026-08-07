@@ -255,3 +255,26 @@ def test_pesan_tuntas_tidak_menawarkan_lanjut_saat_browser_mati(jendela):
     )
     assert "Lanjutkan sisanya" not in teks
     assert "Tidak bisa menyambung" in teks
+
+
+def test_pilihan_profil_chrome_tersimpan(jendela, monkeypatch, tmp_path):
+    """Pilihan harus bertahan antar sesi, bukan kembali diam-diam."""
+    from inaproc_autoinput.ui import main_window as mw
+
+    berkas = tmp_path / "chrome.json"
+    monkeypatch.setattr(mw.chrome, "PILIHAN_PATH", berkas)
+
+    jendela._profil.setCurrentIndex(1)
+    assert mw.chrome.pakai_harian(berkas)
+    assert mw.chrome.profil() == mw.chrome.PROFIL_HARIAN
+
+    jendela._profil.setCurrentIndex(0)
+    assert not mw.chrome.pakai_harian(berkas)
+
+
+def test_pilihan_profil_terkunci_saat_antrean_berjalan(jendela):
+    """Mengganti profil di tengah antrean menunjuk browser yang salah."""
+    jendela._set_sedang_jalan(True)
+    assert not jendela._profil.isEnabled()
+    jendela._set_sedang_jalan(False)
+    assert jendela._profil.isEnabled()

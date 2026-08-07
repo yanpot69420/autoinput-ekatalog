@@ -154,6 +154,33 @@ belaka: Chrome yang dibuka tanpa alamat hanya menampilkan tab baru, dan tab itu
 tidak muncul sebagai target di `/json/list` — port debug hidup tapi tidak ada
 yang bisa dikendalikan, dengan pesan galat yang menyesatkan.
 
+### Dua pilihan profil Chrome
+
+Pilih di kotak **Profil Chrome** pada bilah atas. Pilihannya tersimpan di
+`~/.inaproc-autoinput/chrome.json`.
+
+| | Profil terpisah (bawaan) | Profil Chrome harian |
+|---|---|---|
+| Lokasi | `~/.inaproc-chrome` | profil Chrome biasamu |
+| Chrome harian | tidak perlu ditutup | **harus ditutup sepenuhnya dulu** |
+| Sesi portal | dua sesi satu akun — saling menendang | satu sesi, tidak ada konflik |
+| Tab lain | tidak ada | semuanya ikut terlihat di port debug |
+
+Profil terpisah lebih tidak mengganggu, tapi punya satu kelemahan yang baru
+terasa setelah dipakai: portal melihat dua sesi untuk satu akun, dan karena
+hanya satu yang diizinkan, yang satunya ditendang dengan kotak "Akun Telah
+Keluar". Kalau kamu sering membuka portal di Chrome harian juga, profil harian
+menghilangkan konflik itu sama sekali.
+
+Harganya: port debug hanya bisa dibuka saat Chrome mulai dijalankan, jadi
+Chrome harus benar-benar ditutup lebih dulu — semua jendela, lalu *Keluar* dari
+menu Chrome. Aplikasi memeriksanya dan menolak dengan penjelasan kalau kamu
+lupa, karena Chrome yang dijalankan di atas profil terpakai cuma menyerahkan
+alamatnya ke jendela yang sudah ada lalu keluar diam-diam.
+
+Dengan profil harian aplikasi tidak pernah mengambil alih tab yang sedang
+terbuka: kalau belum ada tab portal, tab baru yang dibuka.
+
 ### Kalau portal terasa berhenti merespons
 
 Dua sebab yang sudah pernah terjadi, dan keduanya tidak terlihat seperti apa
@@ -163,9 +190,12 @@ adanya:
 ber-`z-index` 99999 saat sesimu berakhir — biasanya karena akun yang sama
 dipakai masuk dari browser lain, dan portal hanya mengizinkan satu sesi.
 Halaman di bawahnya tetap terlihat normal, tapi semua klik dan ketikan ditelan
-overlay itu, jadi rasanya seperti lag parah. Aplikasi sekarang mengenalinya dan
-menyebutkannya, bukan menunggu sampai batas waktunya habis. Login ulang di
-jendela Chrome itu.
+overlay itu, jadi rasanya seperti lag parah — sementara tab dan kolom URL tetap
+lancar, karena itu bagian browser, bukan halaman. Aplikasi sekarang mengenalinya
+dan menyebutkannya, bukan menunggu sampai batas waktunya habis.
+
+Kalau ini berulang, ganti **Profil Chrome** ke *harian* (lihat di bawah) —
+penyebabnya memang dua profil memakai satu akun.
 
 **Chrome yang sudah lama hidup.** Terukur di rangkaian uji yang sama: 100 detik
 di Chrome yang sudah dipakai berjam-jam, 29 detik setelah Chrome dijalankan

@@ -129,7 +129,22 @@ class MainWindow(QMainWindow):
         ulang.clicked.connect(self.restart_chrome)
         self._btn_ulang = ulang
 
+        self._profil = QComboBox()
+        self._profil.addItem("Profil terpisah", False)
+        self._profil.addItem("Profil Chrome harian", True)
+        self._profil.setCurrentIndex(1 if chrome.pakai_harian() else 0)
+        self._profil.setToolTip(
+            "Profil terpisah: Chrome harianmu tidak perlu ditutup, tapi portal "
+            "melihat dua sesi untuk satu akun dan menendang salah satunya "
+            "dengan kotak 'Akun Telah Keluar'.\n\n"
+            "Profil harian: satu sesi saja, jadi tidak ada yang saling "
+            "menendang — tapi Chrome harus ditutup sepenuhnya dulu setiap kali."
+        )
+        self._profil.currentIndexChanged.connect(self._ganti_profil)
+
         bar.addWidget(self._file_label, stretch=1)
+        bar.addWidget(QLabel("Profil Chrome:"))
+        bar.addWidget(self._profil)
         bar.addWidget(chrome_btn)
         bar.addWidget(ulang)
         bar.addWidget(uji)
@@ -266,6 +281,18 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(pesan, 10000)
         else:
             QMessageBox.warning(self, "Chrome tidak bisa dibuka", pesan)
+
+    def _ganti_profil(self, *_args) -> None:
+        """Simpan pilihan profil, lalu jelaskan konsekuensinya sekali."""
+        harian = bool(self._profil.currentData())
+        chrome.set_pakai_harian(harian)
+        if harian:
+            self.statusBar().showMessage(
+                "Profil Chrome harian dipakai. Tutup Chrome sepenuhnya dulu "
+                "sebelum klik 'Buka Chrome portal'.", 15000)
+        else:
+            self.statusBar().showMessage(
+                f"Profil terpisah dipakai: {chrome.PROFIL_APLIKASI}", 10000)
 
     def restart_chrome(self) -> None:
         """Tutup lalu buka lagi Chrome portal, mengembalikan kecepatannya."""
@@ -616,6 +643,7 @@ class MainWindow(QMainWindow):
                        self._btn_kategori, self._btn_chrome, self._btn_ulang):
             tombol.setEnabled(not jalan)
         self._mode.setEnabled(not jalan)
+        self._profil.setEnabled(not jalan)
         self._reload_button.setEnabled(not jalan and self._workbook_path is not None)
         self._btn_stop.setEnabled(jalan)
         self._perbarui_tombol()

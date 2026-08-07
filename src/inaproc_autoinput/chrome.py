@@ -21,7 +21,25 @@ import urllib.request
 from pathlib import Path
 
 PORT_DEFAULT = 9222
+
+# Profil terpisah milik aplikasi. Chrome sehari-harimu tidak perlu ditutup, tapi
+# portal jadi melihat dua sesi untuk satu akun -- dan karena hanya satu yang
+# diizinkan, yang satunya ditendang dengan kotak "Akun Telah Keluar".
 PROFIL = Path.home() / ".inaproc-chrome"
+PROFIL_APLIKASI = PROFIL
+
+# Profil Chrome harian. Satu profil berarti satu sesi, jadi tidak ada yang
+# saling menendang -- tapi Chrome harus ditutup dulu sepenuhnya, karena port
+# debug hanya bisa dibuka saat Chrome mulai berjalan.
+if sys.platform == "win32":
+    PROFIL_HARIAN = Path(os.environ.get("LOCALAPPDATA", Path.home())) / \
+        "Google" / "Chrome" / "User Data"
+elif sys.platform == "darwin":
+    PROFIL_HARIAN = Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
+else:
+    PROFIL_HARIAN = Path.home() / ".config" / "google-chrome"
+
+PILIHAN_PATH = Path.home() / ".inaproc-autoinput" / "chrome.json"
 
 # Chrome selalu dibuka dengan alamat ini supaya ada halaman yang bisa
 # dikendalikan sejak awal -- lihat penjelasan di launch().
@@ -54,22 +72,62 @@ def find_chrome() -> Path | None:
     return None
 
 
-def command(port: int = PORT_DEFAULT, chrome: Path | None = None) -> list[str]:
+def pakai_harian(path: Path | None = None) -> bool:
+    """Apakah aplikasi memakai profil Chrome harian, bukan profil sendiri."""
+    berkas = path or PILIHAN_PATH
+    try:
+        return bool(json.loads(berkas.read_text(encoding="utf-8")).get("harian"))
+    except (OSError, ValueError):
+        return False
+
+
+def set_pakai_harian(harian: bool, path: Path | None = None) -> Path:
+    berkas = path or PILIHAN_PATH
+    berkas.parent.mkdir(parents=True, exist_ok=True)
+    berkas.write_text(json.dumps({"harian": bool(harian)}, indent=2), "utf-8")
+    return berkas
+
+
+def profil(harian: bool | None = None) -> Path:
+    if harian is None:
+        harian = pakai_harian()
+    return PROFIL_HARIAN if harian else PROFIL_APLIKASI
+
+
+def sedang_berjalan(dir_profil: Path | None = None) -> bool:
+    """Apakah ada Chrome yang sedang memakai profil ini.
+
+    Dibaca dari berkas kunci yang dibuat Chrome sendiri, bukan dari daftar
+    proses -- tidak perlu perkakas yang berbeda tiap sistem. Kuncinya bisa
+    tertinggal setelah Chrome mati mendadak, jadi ini petunjuk, bukan bukti.
+
+    Diperiksa dengan lexists, bukan exists: di macOS dan Linux SingletonLock
+    adalah symlink ke "namahost-pid" yang memang tidak pernah ada sebagai
+    berkas. exists() mengikuti symlink itu, tidak menemukan apa-apa, lalu
+    menjawab "tidak berjalan" untuk Chrome yang jelas sedang berjalan.
+    """
+    dasar = Path(dir_profil or profil())
+    return any(os.path.lexists(dasar / nama)
+               for nama in ("SingletonLock", "lockfile"))
+
+
+def command(port: int = PORT_DEFAULT, chrome: Path | None = None,
+            dir_profil: Path | None = None) -> list[str]:
     """Perintah lengkap untuk membuka Chrome berport debug."""
     binary = chrome or find_chrome()
     return [
         str(binary or "google-chrome"),
         f"--remote-debugging-port={port}",
-        f"--user-data-dir={PROFIL}",
+        f"--user-data-dir={dir_profil or profil()}",
         "--no-first-run",
         "--no-default-browser-check",
     ]
 
 
-def command_text(port: int = PORT_DEFAULT) -> str:
+def command_text(port: int = PORT_DEFAULT, dir_profil: Path | None = None) -> str:
     """Perintah yang bisa disalin ke Terminal, dengan tanda kutip seperlunya."""
     bagian = []
-    for arg in command(port):
+    for arg in command(port, dir_profil=dir_profil):
         bagian.append(f'"{arg}"' if " " in arg else arg)
     return " ".join(bagian)
 
@@ -124,7 +182,8 @@ def tutup(port: int = PORT_DEFAULT, tunggu: float = 12.0) -> tuple[bool, str]:
                    "klik 'Buka Chrome portal'.")
 
 
-def mulai_ulang(port: int = PORT_DEFAULT, url: str = URL_AWAL) -> tuple[bool, str]:
+def mulai_ulang(port: int = PORT_DEFAULT, url: str = URL_AWAL,
+                dir_profil: Path | None = None) -> tuple[bool, str]:
     """Tutup lalu buka lagi Chrome portal.
 
     Chrome yang sudah lama hidup melambat cukup jauh: rangkaian uji yang sama
@@ -134,13 +193,14 @@ def mulai_ulang(port: int = PORT_DEFAULT, url: str = URL_AWAL) -> tuple[bool, st
     berhasil, pesan = tutup(port)
     if not berhasil:
         return False, pesan
-    berhasil, pesan_buka = launch(port, url)
+    berhasil, pesan_buka = launch(port, url, dir_profil)
     if not berhasil:
         return False, pesan_buka
     return True, "Chrome dijalankan ulang. Sesi loginmu tetap ada."
 
 
-def launch(port: int = PORT_DEFAULT, url: str = URL_AWAL) -> tuple[bool, str]:
+def launch(port: int = PORT_DEFAULT, url: str = URL_AWAL,
+           dir_profil: Path | None = None) -> tuple[bool, str]:
     """Buka Chrome berport debug. Mengembalikan (berhasil, pesan).
 
     Bila port sudah hidup, tidak membuka jendela baru -- cukup melaporkannya.
@@ -159,10 +219,26 @@ def launch(port: int = PORT_DEFAULT, url: str = URL_AWAL) -> tuple[bool, str]:
     if binary is None:
         return False, (
             "Chrome tidak ditemukan di lokasi yang biasa. Buka sendiri dengan:\n\n"
-            + command_text(port)
+            + command_text(port, dir_profil)
         )
 
-    argumen = command(port, binary) + [url or URL_AWAL]
+    dasar = Path(dir_profil or profil())
+    # Port debug hanya bisa dibuka saat Chrome mulai berjalan. Kalau profilnya
+    # sudah dipakai, Chrome baru cuma menyerahkan alamatnya ke jendela yang
+    # sudah ada lalu keluar -- portnya tidak pernah hidup, dan dari luar itu
+    # terlihat seperti aplikasi yang gagal tanpa sebab.
+    if sedang_berjalan(dasar):
+        return False, (
+            f"Chrome sedang berjalan dengan profil ini:\n  {dasar}\n\n"
+            "Port debug hanya bisa dibuka saat Chrome mulai dijalankan, jadi "
+            "Chrome harus ditutup dulu sepenuhnya — semua jendelanya, lalu "
+            "Keluar dari menu Chrome. Setelah itu coba lagi.\n\n"
+            "Kalau kamu yakin Chrome tidak terbuka, berkas kuncinya mungkin "
+            "tertinggal dari Chrome yang mati mendadak; buka sendiri dengan:\n\n"
+            + command_text(port, dasar)
+        )
+
+    argumen = command(port, binary, dasar) + [url or URL_AWAL]
     # Chrome harus lepas dari aplikasi supaya tidak ikut mati saat jendela
     # ditutup. Caranya berbeda per sistem: start_new_session hanya berlaku di
     # POSIX -- Windows mengabaikannya diam-diam, jadi di sana dipakai
@@ -200,7 +276,14 @@ __all__ = [
     "command_text",
     "find_chrome",
     "is_listening",
+    "PILIHAN_PATH",
+    "PROFIL_APLIKASI",
+    "PROFIL_HARIAN",
     "launch",
     "mulai_ulang",
+    "pakai_harian",
+    "profil",
+    "sedang_berjalan",
+    "set_pakai_harian",
     "tutup",
 ]
