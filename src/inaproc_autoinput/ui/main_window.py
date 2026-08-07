@@ -173,6 +173,11 @@ class MainWindow(QMainWindow):
         bar.addWidget(self._mode)
 
         self._btn_satu = QPushButton("Jalankan baris ini")
+        self._btn_satu.setToolTip(
+            "Kerjakan baris yang sedang dipilih. Tetap bisa ditekan walau "
+            "barisnya masih bermasalah — kolom yang kosong dilewati, dan mode "
+            "'Isi saja' tidak menyimpan apa pun ke portal"
+        )
         self._btn_satu.clicked.connect(self.run_selected_row)
 
         self._btn_semua = QPushButton("Jalankan semua")
@@ -370,7 +375,12 @@ class MainWindow(QMainWindow):
 
         jobs = [(p, dict(self._model.row_at(p).data)) for p in posisi]
         awalan = "Menjalankan" if len(jobs) == 1 else f"Menjalankan {len(jobs)} baris"
-        self._mulai_worker(jobs, f"{awalan} — menyambung ke browser…")
+        kurang = sum(1 for p in posisi if self._model.row_at(p) is not None
+                     and self._model.row_at(p).blocking_issues)
+        # Tidak menghalangi, tapi juga tidak diam: dijalankan apa adanya perlu
+        # terlihat, supaya form yang terisi separuh tidak dikira sudah lengkap.
+        catatan = f" · {kurang} baris masih kurang, dijalankan apa adanya" if kurang else ""
+        self._mulai_worker(jobs, f"{awalan} — menyambung ke browser…{catatan}")
 
     def _kenapa_kosong(self) -> str:
         """Kosongnya antrean punya beberapa sebab, dan bedanya penting."""
@@ -398,6 +408,14 @@ class MainWindow(QMainWindow):
         mode: Mode = self._mode.currentData()
         catatan = list(self._assets_panel.assets().catatan())
         berkas = self._assets_panel.assets().masalah()
+        # Baris bermasalah tidak lagi dihalangi tombolnya, jadi di sinilah
+        # keberatannya disampaikan -- sekali, dan hanya saat ada yang benar-benar
+        # tersimpan ke portal.
+        bermasalah = [
+            self._model.row_at(p) for p in posisi
+            if self._model.row_at(p) is not None
+            and self._model.row_at(p).blocking_issues
+        ]
 
         if mode is Mode.ISI_SAJA and not berkas:
             return True
@@ -406,6 +424,12 @@ class MainWindow(QMainWindow):
                  f"Setelah tiap form terisi, aplikasi akan: {mode.label}."]
         if mode is not Mode.ISI_SAJA:
             garis.append("Tindakan ini mengubah data di akun penyedia.")
+        if bermasalah and mode is not Mode.ISI_SAJA:
+            garis += ["", f"{len(bermasalah)} baris masih bermasalah dan "
+                          "kemungkinan besar ditolak portal:"]
+            for row in bermasalah[:5]:
+                galat = "; ".join(str(i) for i in row.blocking_issues[:2])
+                garis.append(f"  • baris {row.excel_row}: {galat}")
         if berkas:
             garis += ["", f"Berkas yang perlu dibereskan ({len(berkas)}):"]
             garis += [f"  • {p}" for p in berkas[:5]]
@@ -553,7 +577,7 @@ class MainWindow(QMainWindow):
     def _perbarui_tombol(self) -> None:
         jalan = getattr(self, "_sedang_jalan", False)
         rows = self._model.rows()
-        self._btn_satu.setEnabled(not jalan and self._baris_siap())
+        self._btn_satu.setEnabled(not jalan and self._baris_terpilih())
         self._btn_semua.setEnabled(not jalan and bool(antrean(rows)))
         self._btn_sisa.setEnabled(
             not jalan and bool(antrean(rows, lewati_gagal=True))
@@ -563,10 +587,17 @@ class MainWindow(QMainWindow):
         indexes = self._table.selectionModel().selectedRows()
         return indexes[0].row() if indexes else None
 
-    def _baris_siap(self) -> bool:
+    def _baris_terpilih(self) -> bool:
+        """Cukup ada baris yang dipilih -- masalahnya tidak ikut menentukan.
+
+        Tombol yang mati tidak memberi tahu apa pun tentang sebabnya, dan saat
+        menguji satu baris itu menghalangi tanpa melindungi: mode 'Isi saja'
+        tidak menyimpan apa-apa, dan kolom yang kosong memang dilewati. Apa yang
+        kurang tetap terbaca di kolom Keterangan, dan mode yang menyimpan tetap
+        menanyakannya lebih dulu.
+        """
         posisi = self._selected_position()
-        row = self._model.row_at(posisi) if posisi is not None else None
-        return row is not None and not row.blocking_issues
+        return posisi is not None and self._model.row_at(posisi) is not None
 
     # --- pembaruan tampilan -------------------------------------------------
 

@@ -70,6 +70,40 @@ def test_tombol_antrean_mati_saat_semua_sukses(jendela):
     assert not jendela._btn_sisa.isEnabled()
 
 
+def _pilih(jendela, posisi: int) -> None:
+    jendela._table.selectRow(posisi)
+
+
+def test_tombol_satu_baris_hidup_walau_barisnya_bermasalah(jendela):
+    """Menguji satu baris tidak boleh dihalangi tombol yang mati.
+
+    Mode 'Isi saja' tidak menyimpan apa pun, dan kolom kosong memang dilewati --
+    yang kurang tetap terbaca di Keterangan.
+    """
+    rows = _rows(Status.MENUNGGU)
+    rows[0].issues = [Issue("harga_produk", "Harga Produk", "wajib diisi")]
+    _pasang(jendela, rows)
+    assert rows[0].blocking_issues
+
+    _pilih(jendela, 0)
+    assert jendela._btn_satu.isEnabled()
+
+
+def test_tombol_satu_baris_tetap_mati_tanpa_baris_terpilih(jendela):
+    _pasang(jendela, _rows(Status.MENUNGGU))
+    jendela._table.clearSelection()
+    assert not jendela._btn_satu.isEnabled()
+
+
+def test_antrean_massal_tetap_melewati_baris_bermasalah(jendela):
+    """Yang dilonggarkan hanya baris tunggal, bukan seluruh antrean."""
+    rows = _rows(Status.MENUNGGU, Status.MENUNGGU)
+    rows[0].issues = [Issue("harga_produk", "Harga Produk", "wajib diisi")]
+    _pasang(jendela, rows)
+    assert not rows[0].siap and rows[1].siap
+    assert jendela._btn_semua.isEnabled()
+
+
 def test_semua_tombol_jalan_terkunci_saat_antrean_berjalan(jendela):
     _pasang(jendela, _rows(Status.MENUNGGU, Status.MENUNGGU))
     jendela._set_sedang_jalan(True)
