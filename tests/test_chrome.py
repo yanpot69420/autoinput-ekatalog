@@ -73,3 +73,32 @@ def test_launch_melapor_bila_chrome_tidak_ada(monkeypatch):
 
 def test_is_listening_saat_port_mati():
     assert chrome.is_listening(port=59999, timeout=0.4) == ""
+
+
+def test_proses_chrome_dilepas_sesuai_sistem(monkeypatch):
+    """Chrome tidak boleh ikut mati saat jendela aplikasi ditutup.
+
+    Caranya berbeda per sistem, dan bedanya diam-diam: `start_new_session`
+    hanya berlaku di POSIX, Windows mengabaikannya tanpa galat. Kalau tidak
+    diperiksa, Chrome di Windows akan tertutup bersama aplikasinya.
+    """
+    for platform, kunci in (("darwin", "start_new_session"),
+                            ("linux", "start_new_session"),
+                            ("win32", "creationflags")):
+        dipakai = {}
+
+        def palsu(argumen, **kw):
+            dipakai.update(kw)
+            return None
+
+        monkeypatch.setattr(chrome.sys, "platform", platform)
+        monkeypatch.setattr(chrome, "is_listening", lambda *a, **k: "")
+        monkeypatch.setattr(chrome, "find_chrome", lambda: Path("/bin/echo"))
+        monkeypatch.setattr(chrome.subprocess, "Popen", palsu)
+
+        berhasil, _ = chrome.launch()
+        assert berhasil, platform
+        assert kunci in dipakai, f"{platform} tidak memakai {kunci}"
+
+    # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    assert dipakai["creationflags"] == 0x8 | 0x200

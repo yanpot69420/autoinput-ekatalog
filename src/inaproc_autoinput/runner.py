@@ -392,12 +392,12 @@ class BrowserRunner:
             self._browser = self._playwright.chromium.connect_over_cdp(self.cdp_url)
         except Exception as error:  # noqa: BLE001
             self.close()
+            from .chrome import command_text
+
             raise RunnerError(
                 f"Tidak bisa menyambung ke Chrome di {self.cdp_url}.\n\n"
-                "Jalankan Chrome dengan port debug terbuka, lalu login:\n"
-                '  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \\\n'
-                '      --remote-debugging-port=9222 \\\n'
-                '      --user-data-dir="$HOME/.inaproc-chrome"'
+                "Klik 'Buka Chrome portal' di jendela aplikasi, atau jalankan "
+                "sendiri lalu login:\n\n" + command_text()
             ) from error
 
         konteks = self._browser.contexts[0] if self._browser.contexts else None

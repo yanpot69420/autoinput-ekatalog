@@ -12,7 +12,9 @@ profilnya permanen. Aplikasi tidak pernah menyentuh kata sandi.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -34,6 +36,13 @@ KANDIDAT = (
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
 )
+
+# Pemasangan Chrome per-pengguna di Windows tidak ada di Program Files.
+if sys.platform == "win32" and os.environ.get("LOCALAPPDATA"):
+    KANDIDAT += (
+        os.path.join(os.environ["LOCALAPPDATA"],
+                     r"Google\Chrome\Application\chrome.exe"),
+    )
 
 
 def find_chrome() -> Path | None:
@@ -99,12 +108,25 @@ def launch(port: int = PORT_DEFAULT, url: str = URL_AWAL) -> tuple[bool, str]:
         )
 
     argumen = command(port, binary) + [url or URL_AWAL]
+    # Chrome harus lepas dari aplikasi supaya tidak ikut mati saat jendela
+    # ditutup. Caranya berbeda per sistem: start_new_session hanya berlaku di
+    # POSIX -- Windows mengabaikannya diam-diam, jadi di sana dipakai
+    # creationflags yang setara.
+    lepas: dict = {}
+    if sys.platform == "win32":
+        lepas["creationflags"] = (
+            getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+        )
+    else:
+        lepas["start_new_session"] = True
+
     try:
         subprocess.Popen(
             argumen,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,  # jangan ikut mati saat aplikasi ditutup
+            **lepas,
         )
     except OSError as error:
         return False, f"Gagal menjalankan Chrome: {error}"

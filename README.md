@@ -76,6 +76,29 @@ Atau jalankan langsung dari terminal:
 .venv/bin/inaproc-autoinput
 ```
 
+### Windows
+
+Siapkan lingkungannya, lalu pakai `scripts\jalankan-windows.bat` — klik dua
+kali, atau klik kanan → *Send to* → *Desktop (create shortcut)*.
+
+```
+python -m venv .venv
+.venv\Scripts\pip install -e . playwright
+```
+
+Berkas `.bat` itu memakai `pythonw.exe` supaya jendela Command Prompt tidak
+ikut muncul, dan path-nya relatif terhadap letak berkasnya sendiri — folder
+proyek boleh dipindah tanpa mengubah apa pun.
+
+Yang **belum diuji di Windows**: seluruh aplikasi ini dikembangkan dan
+dijalankan di macOS. Lapisan yang berbeda perilakunya sudah ditangani —
+lokasi Chrome termasuk pemasangan per-pengguna di `%LOCALAPPDATA%`, dan cara
+melepas proses Chrome supaya tidak ikut mati (`creationflags`, karena
+`start_new_session` diabaikan diam-diam di Windows). Tapi keduanya baru diuji
+lewat simulasi, bukan di mesin Windows sungguhan.
+
+Ikon `.app` hanya untuk macOS; `.bat` di Windows memakai ikon bawaan.
+
 ### Menyambung ke portal
 
 Aplikasi tidak pernah menyimpan kata sandi. Klik **Buka Chrome portal** di
