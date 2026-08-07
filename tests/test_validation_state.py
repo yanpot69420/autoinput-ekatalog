@@ -155,7 +155,7 @@ def test_atribut_bernama_tanpa_nilai_ditolak(lengkap):
 
 def test_nilai_kosong_diambil_dari_dokumen_bernama_sama(lengkap, tmp_path):
     """Atribut yang berpasangan dengan lampiran tidak perlu diketik di Excel."""
-    berkas = tmp_path / "SBU SDA.pdf"
+    berkas = tmp_path / "sbu-konstruksi.pdf"
     berkas.write_bytes(b"%PDF-")
     assets = Assets()
     assets.set_dokumen("Komponen Struktur Biaya Tayang", str(berkas))
@@ -166,7 +166,7 @@ def test_nilai_kosong_diambil_dari_dokumen_bernama_sama(lengkap, tmp_path):
 
     catatan = [i for i in validate(row, assets=assets) if not i.blocking
                and "Komponen" in i.label]
-    assert catatan and "SBU SDA" in catatan[0].message
+    assert catatan and "sbu-konstruksi" in catatan[0].message
 
 
 def test_atribut_tanpa_dokumen_padanan_tetap_memblokir(lengkap):
