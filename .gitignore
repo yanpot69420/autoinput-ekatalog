@@ -13,6 +13,9 @@ out/
 templates/
 config/
 *.xlsx
+
+# Kecuali contoh yang memang sengaja dibagikan.
+!contoh/*.xlsx
 *.status.json
 
 # Pintasan .app memuat path absolut mesin pembuatnya.
