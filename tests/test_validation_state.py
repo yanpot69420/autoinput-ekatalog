@@ -43,15 +43,28 @@ def test_kolom_wajib_kosong_terdeteksi(lengkap):
     assert any(i.key == "harga_produk" for i in _errors(row))
 
 
-def test_produk_sektoral_tidak_wajib(lengkap):
-    """Bagian ini hanya muncul di sebagian kategori, jadi tidak bisa diwajibkan.
-
-    Kategori Jasa 3.1 Galian punya Daftar Produk Sektoral; kategori Barang
-    Meja Kerja tidak punya bagian itu sama sekali.
-    """
+def test_produk_sektoral_wajib(lengkap):
+    """Form menandainya Wajib begitu kategori dipilih."""
     row = dict(lengkap)
     del row["produk_sektoral"]
-    assert not [i for i in _errors(row) if i.key == "produk_sektoral"]
+    assert any(i.key == "produk_sektoral" for i in _errors(row))
+
+
+def test_pdn_tidak_wajib(lengkap):
+    """Tiga pertanyaan self-declare PDN tidak bertanda Wajib di form.
+
+    Portal sudah mengisinya dengan jawaban bawaan, jadi memblokir baris karena
+    ketiganya kosong akan menolak sesuatu yang portal sendiri terima.
+    """
+    row = {k: v for k, v in lengkap.items() if not k.startswith("pdn_lokasi")
+           and not k.startswith("pdn_tenaga") and not k.startswith("pdn_bahan")}
+    assert not [i for i in _errors(row) if i.key.startswith("pdn_")
+                and i.key != "pdn_klasifikasi"]
+
+
+def test_klasifikasi_pdn_tetap_wajib(lengkap):
+    row = {k: v for k, v in lengkap.items() if k != "pdn_klasifikasi"}
+    assert any(i.key == "pdn_klasifikasi" for i in _errors(row))
 
 
 # --- batas panjang mengikuti form, bukan template unggah massal -------------

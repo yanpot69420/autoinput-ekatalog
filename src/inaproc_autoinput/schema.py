@@ -89,8 +89,8 @@ CORE_FIELDS: tuple[Field, ...] = (
           width=64),
 
     # --- Informasi produk
-    Field("produk_sektoral", "Daftar Produk Sektoral", G_PRODUK,
-          hint="Wajib hanya bila kategorinya menyediakan daftar ini", width=30),
+    Field("produk_sektoral", "Daftar Produk Sektoral", G_PRODUK, required=True,
+          hint="Dipilih dari daftar baku milik kategori tersebut", width=30),
     Field("nama_produk", "Nama Produk", G_PRODUK, required=True,
           min_len=5, max_len=250, width=44),
     Field("deskripsi", "Deskripsi", G_PRODUK, max_len=2000, width=44),
@@ -100,12 +100,16 @@ CORE_FIELDS: tuple[Field, ...] = (
           hint="Kode saja, mis. 54310. Daftarnya berbeda tiap kategori", width=16),
     Field("pdn_klasifikasi", "Klasifikasi Produk", G_PDN, required=True,
           options=ref.KLASIFIKASI_PDN, width=18),
-    Field("pdn_lokasi_produksi", "Lokasi Produksi", G_PDN, required=True,
-          options=ref.LOKASI_PRODUKSI, lookup="Lokasi Produksi", width=32),
+    # Tiga pertanyaan self-declare PDN tidak bertanda Wajib di form -- portal
+    # sudah mengisinya dengan jawaban bawaan. Dibiarkan opsional supaya baris
+    # tidak diblokir untuk sesuatu yang portal sendiri tidak wajibkan.
+    Field("pdn_lokasi_produksi", "Lokasi Produksi", G_PDN,
+          options=ref.LOKASI_PRODUKSI, lookup="Lokasi Produksi",
+          hint="Kosong berarti memakai jawaban bawaan portal", width=32),
     Field("pdn_tenaga_kerja", "Tenaga Kerja dalam Proses Produksi", G_PDN,
-          required=True, options=ref.TENAGA_KERJA, lookup="Tenaga Kerja", width=32),
+          options=ref.TENAGA_KERJA, lookup="Tenaga Kerja", width=32),
     Field("pdn_bahan_baku", "Bahan Baku dalam Proses Produksi", G_PDN,
-          required=True, options=ref.BAHAN_BAKU, lookup="Bahan Baku", width=32),
+          options=ref.BAHAN_BAKU, lookup="Bahan Baku", width=32),
 
     # --- Pajak
     Field("ppn", "PPN", G_PAJAK, required=True, options=ref.PPN, width=12),
