@@ -247,32 +247,49 @@ class ProductFormFiller:
             return
         elemen = self.page.locator(selector).first
         elemen.wait_for(state="visible", timeout=TIMEOUT_PENDEK)
+
+        # Sebagian kolom dikunci portal setelah pilihan lain dibuat -- Nama
+        # Produk, misalnya, terisi sendiri begitu Daftar Produk Sektoral
+        # dipilih. fill() pada kolom terkunci menunggu sampai batas waktunya
+        # habis, tiga puluh detik, lalu menggagalkan seluruh barisnya.
+        if not elemen.is_editable():
+            ada = ""
+            try:
+                ada = (elemen.input_value() or "").strip()
+            except Exception:  # noqa: BLE001 -- bukan kotak isian biasa
+                pass
+            if ada and _normalisasi(ada) != _normalisasi(nilai):
+                self.peringatan.append(
+                    f"{label}: dikunci portal dan sudah berisi '{ada[:50]}', "
+                    f"berbeda dari isi Excel ('{nilai[:50]}') — dilewati")
+            else:
+                self.peringatan.append(f"{label}: dikunci portal, dilewati")
+            return
+
         elemen.fill(nilai)
         self._catat(f"{label}: {nilai[:60]}")
 
-    def _ketik(self, kotak, teks: str) -> None:
-        """Isi kotak pencarian tanpa membayar satu perjalanan per karakter.
+    def _ketik(self, teks: str) -> None:
+        """Ketik ke elemen yang sedang fokus, tanpa satu perjalanan per karakter.
 
-        `keyboard.type` mengirim tiap huruf sebagai pesan tersendiri ke browser.
-        Untuk nama kategori sepanjang 95 karakter itu sembilan puluh lima kali
-        bolak-balik -- terukur dua detik untuk satu kotak, dan ada tujuh kotak
-        per baris.
+        Lewat papan ketik, bukan `fill()` pada elemen tertentu. Kotak react-select
+        punya dua input: satu untuk pencarian, satu lagi penampung nilai yang
+        dikendalikan React. `fill()` pada penampung menulis nilainya langsung
+        tanpa React tahu -- dari luar kolomnya tampak terisi, padahal tidak ada
+        yang pernah terpilih, dan yang sampai ke pencarian cuma huruf terakhir.
 
-        Karakter terakhir tetap diketik sungguhan. Komponen pencarian yang
-        menyimak penekanan tombol, bukan perubahan nilai, tetap terpicu; sisanya
-        dipasang sekaligus. Bila kotaknya menolak diisi langsung, seluruhnya
-        kembali diketik seperti semula.
+        `insert_text` mengirim seluruh teks sebagai satu peristiwa input yang
+        sungguhan, jadi React memprosesnya seperti ketikan. Karakter terakhir
+        tetap ditekan betulan supaya komponen yang menyimak tombol, bukan
+        perubahan nilai, ikut terpicu.
         """
         if not teks:
             return
-        try:
-            kotak.fill(teks[:-1])
-        except Exception:  # noqa: BLE001 -- kotak tak biasa, ketik saja semuanya
-            self.page.keyboard.type(teks)
-            return
+        if len(teks) > 1:
+            self.page.keyboard.insert_text(teks[:-1])
         self.page.keyboard.type(teks[-1])
 
-    def _pilih_dropdown(self, pembuka, nilai: str, label: str, kotak=None) -> None:
+    def _pilih_dropdown(self, pembuka, nilai: str, label: str) -> None:
         """react-select: klik, ketik, lalu pilih opsi yang cocok.
 
         Yang diklik `pembuka` -- wadah dropdownnya, bukan input di dalamnya.
@@ -283,22 +300,42 @@ class ProductFormFiller:
         if not nilai:
             return
         pembuka.click()
-        if kotak is not None:
-            self._ketik(kotak, nilai)
-        else:
-            self.page.keyboard.type(nilai)
-        # Hanya opsi yang terlihat. Menu lain yang sudah ditutup tetap ada di DOM,
-        # dan kalau ikut terjaring, penantian akan macet pada elemen tersembunyi.
-        opsi = self.page.locator(SEL_OPSI_TERLIHAT)
+        self._ketik(nilai)
+
+        # Hanya elemen ber-role="option". Portal membungkus tiap opsi dalam
+        # empat elemen berkelas *option* -- wrapper, label, dan description ikut
+        # terjaring kalau disaring lewat kelas, dan yang terklik bisa jadi span
+        # yang tidak memilih apa pun.
+        opsi = self.page.locator('[role="option"]:visible')
         try:
             opsi.first.wait_for(state="visible", timeout=TIMEOUT_PENDEK)
-        except Exception as error:  # noqa: BLE001 -- diterjemahkan jadi pesan
-            raise RunnerError(
-                f"{label}: daftar pilihan tidak muncul untuk '{nilai}'"
-            ) from error
+        except Exception:
+            opsi = self.page.locator(SEL_OPSI_TERLIHAT)
+            try:
+                opsi.first.wait_for(state="visible", timeout=TIMEOUT_PENDEK)
+            except Exception as error:  # noqa: BLE001 -- diterjemahkan jadi pesan
+                raise RunnerError(
+                    f"{label}: daftar pilihan tidak muncul untuk '{nilai}'"
+                ) from error
 
-        cocok = opsi.filter(has_text=re.compile(rf"^\s*{re.escape(nilai)}", re.I))
-        (cocok.first if cocok.count() else opsi.first).click()
+        # Baris pertama saja: sebagian opsi punya keterangan di baris kedua.
+        teks = [t.strip().split("\n")[0] for t in opsi.all_inner_texts()]
+        cari = _normalisasi(nilai)
+        indeks = next((i for i, x in enumerate(teks) if _normalisasi(x) == cari), None)
+        if indeks is None:
+            indeks = next(
+                (i for i, x in enumerate(teks) if _normalisasi(x).startswith(cari)), None)
+        if indeks is None:
+            # Dulu opsi pertama yang diklik saat tidak ada yang cocok. Itu diam-
+            # diam memilih nilai yang salah -- jauh lebih buruk daripada berhenti,
+            # karena hasilnya kelihatan benar sampai produknya tayang.
+            contoh = "; ".join(teks[:4]) or "(daftar kosong)"
+            raise RunnerError(
+                f"{label}: '{nilai}' tidak ada di daftar pilihan portal.\n\n"
+                f"Yang ditawarkan portal antara lain: {contoh}\n\n"
+                "Samakan tulisannya di Excel dengan salah satu pilihan itu."
+            )
+        opsi.nth(indeks).click()
         self._catat(f"{label}: {nilai}")
 
     def _saklar(self, selector: str, nyala: bool, label: str) -> None:
@@ -328,7 +365,7 @@ class ProductFormFiller:
         kotak = self.page.locator(SEL_KATEGORI).first
         kotak.click()
         kotak.fill("")
-        self._ketik(kotak, tiga)
+        self._ketik(tiga)
 
         for tingkat, nama in ((1, satu), (2, dua), (3, tiga)):
             pilihan = self.page.get_by_text(nama, exact=True).locator("visible=true")
@@ -575,8 +612,7 @@ class ProductFormFiller:
         if not nilai:
             return
         wadah = self.page.evaluate(_WADAH_DROPDOWN, selektor) or selektor
-        self._pilih_dropdown(self.page.locator(wadah).first, nilai, label,
-                             self.page.locator(selektor).first)
+        self._pilih_dropdown(self.page.locator(wadah).first, nilai, label)
 
     def _pilih_dropdown_dekat(self, label: str, nilai: str) -> None:
         """Cari dropdown lewat labelnya, lalu pilih nilainya."""
@@ -586,8 +622,7 @@ class ProductFormFiller:
         if not kotak:
             self.peringatan.append(f"{label}: kolomnya tidak ketemu di form, dilewati")
             return
-        self._pilih_dropdown(self.page.locator(kotak["klik"]).first, nilai, label,
-                             self.page.locator(kotak["ketik"]).first)
+        self._pilih_dropdown(self.page.locator(kotak["klik"]).first, nilai, label)
 
     def _input_dekat(self, label: str):
         kotak = self._selektor_dekat(label, dropdown=False)

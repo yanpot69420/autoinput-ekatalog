@@ -321,6 +321,10 @@ def test_ketik_memasang_teks_utuh_dan_menekan_huruf_terakhir(halaman):
 
     Komponen pencarian yang menyimak keydown -- bukan perubahan nilai -- harus
     tetap terpicu, karena itu huruf penghabisan tetap diketik sungguhan.
+
+    Lewat papan ketik ke elemen yang fokus, bukan fill() ke elemen tertentu:
+    kotak react-select punya input penampung nilai yang, bila diisi langsung,
+    tampak terisi tanpa pernah benar-benar terpilih.
     """
     pengisi = ProductFormFiller(halaman)
     kotak = halaman.locator(SEL_KATEGORI).first
@@ -334,7 +338,7 @@ def test_ketik_memasang_teks_utuh_dan_menekan_huruf_terakhir(halaman):
         SEL_KATEGORI,
     )
 
-    pengisi._ketik(kotak, "Meja Kerja")
+    pengisi._ketik("Meja Kerja")
     assert kotak.input_value() == "Meja Kerja"
     assert halaman.evaluate("() => window.__keydown") == 1
 
@@ -344,7 +348,8 @@ def test_ketik_teks_kosong_tidak_menyentuh_kotak(halaman):
     pengisi = ProductFormFiller(halaman)
     kotak = halaman.locator(SEL_KATEGORI).first
     kotak.fill("sisa")
-    pengisi._ketik(kotak, "")
+    kotak.click()
+    pengisi._ketik("")
     assert kotak.input_value() == "sisa"
 
 
@@ -654,3 +659,63 @@ def test_atribut_dropdown_terisi_bukan_dilewati(halaman, berkas):
     assert nilai[0] == "M3", f"atribut dropdown tidak terisi: {nilai}"
     assert nilai[1] == "BNS-GAL-01"
     assert not [p for p in pengisi.peringatan if "Satuan Pengukuran" in p]
+
+
+@pytestmark_browser
+def test_nilai_yang_tidak_ada_di_daftar_menghentikan_barisnya(halaman):
+    """Dulu opsi pertama yang diklik saat tidak ada yang cocok.
+
+    Itu diam-diam memilih nilai yang salah — jauh lebih buruk daripada berhenti,
+    karena hasilnya kelihatan benar sampai produknya tayang.
+    """
+    halaman.set_content(
+        '<div id="buka">Pilih</div>'
+        '<div role="option">Alpha</div><div role="option">Beta</div>')
+    pengisi = ProductFormFiller(halaman)
+
+    with pytest.raises(RunnerError) as galat:
+        pengisi._pilih_dropdown(halaman.locator("#buka"), "Gamma", "Uji")
+
+    pesan = str(galat.value)
+    assert "tidak ada di daftar pilihan portal" in pesan
+    assert "Alpha" in pesan          # sebutkan yang tersedia
+    assert "Samakan tulisannya" in pesan
+
+
+@pytestmark_browser
+def test_opsi_dicocokkan_persis_bukan_yang_pertama(halaman):
+    """'Buah' tidak boleh memilih 'Buah Jembatan' yang kebetulan lebih dulu."""
+    halaman.set_content(
+        '<div id="buka">Pilih</div>'
+        '<div role="option" onclick="window.__pilih=this.innerText">Buah Jembatan</div>'
+        '<div role="option" onclick="window.__pilih=this.innerText">Buah</div>')
+    ProductFormFiller(halaman)._pilih_dropdown(
+        halaman.locator("#buka"), "Buah", "Uji")
+    assert halaman.evaluate("() => window.__pilih") == "Buah"
+
+
+@pytestmark_browser
+def test_kolom_terkunci_dilewati_bukan_menggantung(halaman):
+    """Portal mengunci Nama Produk begitu Daftar Produk Sektoral dipilih.
+
+    fill() pada kolom terkunci menunggu sampai batas waktunya habis — tiga
+    puluh detik — lalu menggagalkan seluruh barisnya, dengan pesan "Timeout"
+    yang tidak menyinggung sebabnya sama sekali.
+    """
+    halaman.set_content('<input id="terkunci" value="Diisi portal" disabled>')
+    pengisi = ProductFormFiller(halaman)
+    pengisi._isi("#terkunci", "Dari Excel", "Nama Produk")
+
+    assert pengisi.langkah == []          # tidak mengaku mengisi
+    assert len(pengisi.peringatan) == 1
+    pesan = pengisi.peringatan[0]
+    assert "dikunci portal" in pesan
+    assert "Diisi portal" in pesan and "Dari Excel" in pesan   # sebutkan bedanya
+
+
+@pytestmark_browser
+def test_kolom_terkunci_yang_isinya_sama_tidak_dikeluhkan_panjang(halaman):
+    halaman.set_content('<input id="terkunci" value="Helm pelindung" disabled>')
+    pengisi = ProductFormFiller(halaman)
+    pengisi._isi("#terkunci", "Helm  pelindung", "Nama Produk")
+    assert pengisi.peringatan == ["Nama Produk: dikunci portal, dilewati"]
