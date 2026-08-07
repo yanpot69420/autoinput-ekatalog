@@ -589,3 +589,30 @@ def test_siap_tanpa_tab_tetap_benar_selama_tersambung():
 
     kosong = BrowserRunner()
     assert not kosong.siap()
+
+
+def test_simpan_menerima_mode_berbentuk_str():
+    """Mode dari combobox Qt datang sebagai 'isi_saja', bukan Mode.ISI_SAJA.
+
+    Dengan perbandingan identitas, mode "Isi saja" lolos dari penjaganya dan
+    justru menekan tombol Simpan di portal -- menyimpan produk yang seharusnya
+    cuma diisi untuk diperiksa.
+    """
+    class PageJebakan:
+        def get_by_role(self, *a, **k):  # pragma: no cover
+            raise AssertionError("'Isi saja' tidak boleh mencari tombol Simpan")
+
+    pengisi = ProductFormFiller(PageJebakan())
+    assert pengisi.simpan("isi_saja") == ""
+    assert any("Berhenti sebelum menyimpan" in s for s in pengisi.langkah)
+
+
+def test_mode_str_dibakukan_di_jalankan():
+    class PageDiam:
+        def is_closed(self) -> bool:
+            return False
+
+    runner = BrowserRunner()
+    runner.page = PageDiam()
+    hasil = runner.jalankan({"kategori": "A > B > C"}, "simpan", batal=lambda: True)
+    assert hasil.dibatalkan and not hasil.tersimpan

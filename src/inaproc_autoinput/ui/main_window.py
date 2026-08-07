@@ -493,9 +493,19 @@ class MainWindow(QMainWindow):
             "bila memang ingin mengulangnya."
         )
 
+    def _mode_terpilih(self) -> Mode:
+        """Mode dari combobox, dibakukan jadi anggota Mode.
+
+        Qt menyimpan nilai enum lalu mengembalikannya sebagai str biasa, jadi
+        `currentData()` memberi 'isi_saja', bukan Mode.ISI_SAJA. Setiap
+        perbandingan `is` sesudahnya diam-diam salah -- termasuk yang menentukan
+        apakah tombol Simpan di portal boleh ditekan.
+        """
+        return Mode(self._mode.currentData())
+
     def _konfirmasi_antrean(self, posisi: list[int], sebutan: str) -> bool:
         """Konfirmasi sebelum antrean jalan. Selalu untuk mode yang menyimpan."""
-        mode: Mode = self._mode.currentData()
+        mode = self._mode_terpilih()
         catatan = list(self._assets_panel.assets().catatan())
         berkas = self._assets_panel.assets().masalah()
         # Baris bermasalah tidak lagi dihalangi tombolnya, jadi di sinilah
@@ -537,7 +547,7 @@ class MainWindow(QMainWindow):
         self._set_sedang_jalan(True)
         self.statusBar().showMessage(pesan)
 
-        self._worker = RunWorker(jobs, self._mode.currentData(), CDP_DEFAULT,
+        self._worker = RunWorker(jobs, self._mode_terpilih(), CDP_DEFAULT,
                                  self._assets_panel.assets(), self)
         self._worker.langkah.connect(self._on_langkah)
         self._worker.mulai.connect(self._on_mulai)

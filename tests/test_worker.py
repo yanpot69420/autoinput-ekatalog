@@ -132,3 +132,14 @@ def test_gagal_menyambung_melapor_lewat_tuntas_bukan_koneksi():
     ringkasan = terkumpul[0]
     assert ringkasan.sisa == 7 and ringkasan.dikerjakan == 0
     assert "Tidak bisa menyambung" in ringkasan.alasan
+
+
+def test_worker_membakukan_mode_berbentuk_str():
+    """Jendela meneruskan apa pun yang diberi combobox; worker yang membakukan."""
+    from inaproc_autoinput.runner import Mode
+    from inaproc_autoinput.ui.worker import RunWorker
+
+    for teks, harapan in (("isi_saja", Mode.ISI_SAJA),
+                          ("simpan_draf", Mode.SIMPAN_DRAF),
+                          ("simpan", Mode.SIMPAN)):
+        assert RunWorker(None, teks, "http://localhost:9222")._mode is harapan

@@ -41,7 +41,8 @@ class RunWorker(QThread):
         super().__init__(parent)
         # jobs None berarti cuma menguji koneksi, tanpa menyentuh form.
         self._jobs = jobs
-        self._mode = mode
+        # Combobox Qt mengembalikan nilai enum sebagai str biasa.
+        self._mode = Mode(mode)
         self._cdp_url = cdp_url
         self._assets = assets
         self._berhenti = threading.Event()

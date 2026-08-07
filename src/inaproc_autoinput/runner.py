@@ -487,6 +487,11 @@ class ProductFormFiller:
     # --- penyimpanan --------------------------------------------------------
 
     def simpan(self, mode: Mode) -> str:
+        # Dibakukan dulu. Mode datang dari combobox Qt, yang mengembalikan
+        # 'isi_saja' sebagai str biasa -- bukan anggota Mode. Dengan `is`,
+        # perbandingannya diam-diam salah dan mode "Isi saja" justru menekan
+        # tombol Simpan.
+        mode = Mode(mode)
         # Diperiksa sebelum tombolnya disentuh: berhenti yang datang sedetik
         # sebelum klik tidak boleh berujung produk yang tetap tersimpan.
         self.periksa_batal()
@@ -652,6 +657,7 @@ class BrowserRunner:
 
     def jalankan(self, data: dict, mode: Mode = Mode.ISI_SAJA, catatan=None,
                  assets: Assets | None = None, batal=None) -> Hasil:
+        mode = Mode(mode)
         if not self.siap():
             return Hasil(False, "Browser belum tersambung")
 

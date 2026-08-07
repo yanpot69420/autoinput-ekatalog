@@ -325,3 +325,33 @@ def test_pemeriksaan_menyerah_setelah_cukup_lama(jendela, monkeypatch):
 
     jendela._periksa_setelah_chrome(sisa=0)
     assert dijadwalkan == []
+
+
+def test_mode_dari_combobox_selalu_anggota_Mode(jendela):
+    """Qt melucuti enum jadi str, dan setiap perbandingan `is` jadi salah.
+
+    Akibatnya dua-duanya buruk: tombol "Jalankan baris ini" melempar
+    AttributeError yang tidak terlihat di mana pun sehingga terkesan tidak
+    berfungsi, dan seandainya lolos, mode "Isi saja" akan dianggap menyimpan.
+    """
+    from inaproc_autoinput.runner import Mode
+
+    for i in range(jendela._mode.count()):
+        jendela._mode.setCurrentIndex(i)
+        mode = jendela._mode_terpilih()
+        assert isinstance(mode, Mode), jendela._mode.itemText(i)
+        assert mode is Mode(mode)          # identitas, bukan sekadar kesamaan
+        assert mode.label                  # yang dulu melempar galat
+
+
+def test_menekan_jalankan_baris_tidak_melempar_galat(jendela, monkeypatch):
+    """Galat di dalam slot Qt cuma tercetak ke stderr — tak terlihat di .app."""
+    dikirim = []
+    monkeypatch.setattr(type(jendela), "_mulai_worker",
+                        lambda self, jobs, pesan: dikirim.append(jobs))
+
+    _pasang(jendela, _rows(Status.MENUNGGU))
+    _pilih(jendela, 0)
+    jendela.run_selected_row()
+
+    assert dikirim and len(dikirim[0]) == 1
