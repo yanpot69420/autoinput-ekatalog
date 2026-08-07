@@ -146,8 +146,8 @@ Skemanya disusun dari pembacaan langsung form `penyedia.inaproc.id/products/add`
 — lihat [docs/form-tambah-produk.md](docs/form-tambah-produk.md). Ini berbeda
 cukup jauh dari template unggah massal, jadi jangan pakai yang itu sebagai acuan.
 
-**35 kolom inti** — kategori (satu kolom jalur lengkap), Daftar Produk
-Sektoral, nama, deskripsi, foto & video, saklar Merek/SNI/TKDN, KBKI,
+**29 kolom inti** — kategori (satu kolom jalur lengkap), Daftar Produk
+Sektoral, nama, deskripsi, URL video, saklar Merek/SNI/TKDN, KBKI,
 self-declare PDN, PPN, PPnBM, kuantitas desimal, harga, stok, pre-order, serta
 bagian Pengiriman (berat, dimensi, ongkir) yang hanya berlaku untuk kategori
 bertipe Barang.
@@ -162,12 +162,24 @@ Termasuk di sini: Satuan Pengukuran, Kode Produk, Lingkup Kegiatan, Lokasi
 Layanan (Kecamatan), SBU Konstruksi. Semuanya milik kategori, bukan milik semua
 produk — karena itu tidak jadi kolom inti.
 
-**5 pasang `Dokumen n` / `Berkas n`** — lampiran PDF, mengikuti pola yang sama
-karena daftar dokumen yang diminta juga berbeda tiap kategori.
+### Berkas tidak ada di Excel
 
-Foto, video, dan dokumen diisi dengan **alamat berkas di komputer**, bukan
-tautan — form mengunggah berkas. Aplikasi memeriksa berkasnya benar-benar ada,
-formatnya benar, dan ukurannya tidak melebihi batas sebelum baris dijalankan.
+Foto, video, dan dokumen PDF dipilih lewat tab **Berkas** di aplikasi, bukan
+diketik sebagai path di spreadsheet. Tiga alasan: path yang diketik tangan
+rawan salah dan tidak bisa diperiksa saat mengetik; dokumen perusahaan seperti
+SBU sama untuk seluruh baris sehingga menuliskannya puluhan kali cuma
+pengulangan; dan spreadsheet bukan tempat yang wajar untuk memilih berkas.
+
+Dua tingkat: **dokumen dan foto umum** berlaku untuk semua baris, **foto per
+baris** menimpa foto umum untuk produk yang punya foto sendiri.
+
+Portal meminta unggahan terpisah untuk *Masa Berlaku SBU* padahal isinya
+dokumen yang sama dengan *SBU* — panel mengikutkannya otomatis, cukup pilih
+sekali.
+
+Pilihan berkas disimpan di `<nama>.berkas.json` di sebelah workbook, jadi file
+Excel penyedia tidak pernah ditulisi. Aplikasi memeriksa berkasnya ada,
+formatnya benar, dan ukurannya di bawah batas sebelum baris dijalankan.
 
 Pembacaan mengikuti **judul kolom di baris 2**, bukan posisinya — penyedia boleh
 menggeser kolom atau menyisipkan catatan sendiri tanpa merusak apa pun.
@@ -198,6 +210,7 @@ Dua perlindungan di dalamnya:
 | `schema.py` | Definisi kolom template universal |
 | `references.py` | Daftar pilihan yang dibaca dari form, sumber dropdown |
 | `categories.py` | Mengambil, menyimpan, dan menelusuri pohon kategori portal |
+| `assets.py` | Foto, video, dan dokumen PDF beserta pemeriksaannya |
 | `workbook.py` | Membuat template kosong, membaca template terisi |
 | `validation.py` | Memeriksa baris sebelum dijalankan |
 | `model.py` | `ProductRow` dan status eksekusinya |

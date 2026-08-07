@@ -4,7 +4,7 @@ Disusun dari pembacaan langsung form `penyedia.inaproc.id/products/add` untuk
 kategori Jasa (3.1 Galian) dan Barang (Meja Kerja) -- lihat
 `docs/form-tambah-produk.md`.
 
-Empat bagian:
+Tiga bagian:
 
 * **Kolom inti** -- selalu ada, apa pun kategorinya.
 * **Kolom khusus Barang** -- bagian Pengiriman, TKDN, dan PPnBM hanya muncul
@@ -12,7 +12,9 @@ Empat bagian:
 * **Blok atribut** -- pasangan Atribut/Nilai untuk `Spesifikasi Produk >
   Informasi Utama`, yang isinya berbeda tiap Kategori Level 3. Di form
   bentuknya array berindeks, bukan field bernama tetap.
-* **Blok lampiran** -- pasangan nama dokumen dan path berkas PDF-nya.
+
+Foto, video, dan dokumen PDF sengaja tidak ada di sini -- semuanya dipilih
+lewat panel Berkas di aplikasi. Lihat `assets.py`.
 
 Kategori ditulis sebagai **satu kolom berisi jalur lengkap**, mengikuti bentuk
 pemilihnya di portal: satu kotak pencarian bertingkat, bukan tiga dropdown.
@@ -32,7 +34,6 @@ TIPE_DIGITAL = "Digital"
 TIPE_PRODUK = (TIPE_BARANG, TIPE_JASA, TIPE_DIGITAL)
 
 JUMLAH_SLOT_ATRIBUT = 8
-JUMLAH_SLOT_LAMPIRAN = 5
 
 PEMISAH_KATEGORI = " > "
 
@@ -82,7 +83,6 @@ G_PAJAK = "Pajak"
 G_HARGA = "Harga & Stok"
 G_KIRIM = "Pengiriman (khusus Barang)"
 G_ATRIBUT = "Atribut Khusus Kategori"
-G_LAMPIRAN = "Lampiran Dokumen"
 
 CORE_FIELDS: tuple[Field, ...] = (
     # --- Kategori: satu kolom jalur lengkap, seperti kotak pencarian di portal.
@@ -99,15 +99,12 @@ CORE_FIELDS: tuple[Field, ...] = (
           min_len=5, max_len=250, width=44),
     Field("deskripsi", "Deskripsi", G_PRODUK, max_len=2000, width=44),
 
-    # --- Foto & video: form meminta unggah berkas, bukan tautan.
-    Field("foto_1", "Foto Utama", G_MEDIA, required=True, file_ext=FOTO_EXT,
-          hint="Path berkas di komputer. 300x300 s.d. 2048x2048 px", width=38),
-    Field("foto_2", "Foto 2", G_MEDIA, file_ext=FOTO_EXT, width=32),
-    Field("foto_3", "Foto 3", G_MEDIA, file_ext=FOTO_EXT, width=32),
-    Field("foto_4", "Foto 4", G_MEDIA, file_ext=FOTO_EXT, width=32),
-    Field("foto_5", "Foto 5", G_MEDIA, file_ext=FOTO_EXT, width=32),
-    Field("video_berkas", "Video Produk", G_MEDIA, file_ext=VIDEO_EXT,
-          max_mb=BATAS_VIDEO_MB, hint="Path berkas .mp4 atau .mov", width=32),
+    # Foto, video, dan dokumen PDF tidak lagi jadi kolom Excel -- semuanya
+    # dipilih lewat panel Berkas di aplikasi. Alasannya: mengetik path berkas
+    # di spreadsheet itu rawan salah, tidak bisa diperiksa saat mengetik, dan
+    # dokumen perusahaan seperti SBU sama untuk seluruh baris sehingga
+    # menuliskannya 51 kali cuma pengulangan. Yang tersisa di sini hanya URL
+    # video, karena itu memang teks, bukan berkas.
     Field("video_url", "URL Video Produk", G_MEDIA, url=True,
           hint="Tautan YouTube", width=32),
 
@@ -186,26 +183,8 @@ def attribute_fields(slots: int = JUMLAH_SLOT_ATRIBUT) -> tuple[Field, ...]:
     return tuple(out)
 
 
-def attachment_fields(slots: int = JUMLAH_SLOT_LAMPIRAN) -> tuple[Field, ...]:
-    """Pasangan nama dokumen dan path berkas PDF-nya."""
-    out: list[Field] = []
-    for i in range(1, slots + 1):
-        hint = (
-            "Nama dokumen persis seperti di bagian Lampiran, mis. Sertifikat Standar"
-            if i == 1 else ""
-        )
-        out.append(Field(f"dokumen_{i}_nama", f"Dokumen {i}", G_LAMPIRAN,
-                         hint=hint, width=30))
-        out.append(Field(f"dokumen_{i}_berkas", f"Berkas {i}", G_LAMPIRAN,
-                         file_ext=DOKUMEN_EXT, max_mb=BATAS_DOKUMEN_MB,
-                         hint="Path berkas .pdf" if i == 1 else "", width=34))
-    return tuple(out)
-
-
-def all_fields(
-    slots: int = JUMLAH_SLOT_ATRIBUT, lampiran: int = JUMLAH_SLOT_LAMPIRAN
-) -> tuple[Field, ...]:
-    return CORE_FIELDS + attribute_fields(slots) + attachment_fields(lampiran)
+def all_fields(slots: int = JUMLAH_SLOT_ATRIBUT) -> tuple[Field, ...]:
+    return CORE_FIELDS + attribute_fields(slots)
 
 
 def by_key(fields: tuple[Field, ...] = ()) -> dict[str, Field]:
@@ -237,20 +216,13 @@ def attribute_pairs(row: dict, slots: int = JUMLAH_SLOT_ATRIBUT) -> dict[str, st
     return {n: v for n, v in _pairs(row, "atribut", "nilai", slots) if n}
 
 
-def attachment_pairs(row: dict, slots: int = JUMLAH_SLOT_LAMPIRAN) -> dict[str, str]:
-    return {n: v for n, v in _pairs(row, "dokumen", "berkas", slots) if n}
-
-
 def incomplete_pairs(row: dict) -> list[tuple[str, str, str]]:
-    """Slot yang hanya terisi separuh -- (jenis, nama, nilai)."""
-    out = []
-    for nama, nilai in _pairs(row, "atribut", "nilai", JUMLAH_SLOT_ATRIBUT):
-        if not nama or not nilai:
-            out.append(("atribut", nama, nilai))
-    for nama, nilai in _pairs(row, "dokumen", "berkas", JUMLAH_SLOT_LAMPIRAN):
-        if not nama or not nilai:
-            out.append(("dokumen", nama, nilai))
-    return out
+    """Slot atribut yang hanya terisi separuh -- (jenis, nama, nilai)."""
+    return [
+        ("atribut", nama, nilai)
+        for nama, nilai in _pairs(row, "atribut", "nilai", JUMLAH_SLOT_ATRIBUT)
+        if not nama or not nilai
+    ]
 
 
 __all__ = [
@@ -259,7 +231,6 @@ __all__ = [
     "FOTO_EXT",
     "Field",
     "JUMLAH_SLOT_ATRIBUT",
-    "JUMLAH_SLOT_LAMPIRAN",
     "PEMISAH_KATEGORI",
     "TIPE_BARANG",
     "TIPE_DIGITAL",
@@ -267,8 +238,6 @@ __all__ = [
     "TIPE_PRODUK",
     "VIDEO_EXT",
     "all_fields",
-    "attachment_fields",
-    "attachment_pairs",
     "attribute_fields",
     "attribute_pairs",
     "by_key",

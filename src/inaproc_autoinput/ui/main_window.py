@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStatusBar,
     QTableView,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -28,8 +29,10 @@ from .. import state, workbook
 from ..categories import Catalog
 from ..model import Status, rows_from_records
 from .. import chrome
+from ..assets import Assets
 from ..runner import CDP_DEFAULT, URL_TAMBAH, Mode
 from ..validation import validate
+from .assets_panel import AssetsPanel
 from .table_model import COL_NAMA, COL_PESAN, ProductTableModel
 from .worker import RunWorker
 
@@ -147,19 +150,18 @@ class MainWindow(QMainWindow):
         return view
 
     def _build_detail(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        title = QLabel("Rincian baris")
-        title.setStyleSheet("font-weight: 600;")
-        layout.addWidget(title)
+        tab = QTabWidget()
 
         self._detail = QTextEdit()
         self._detail.setReadOnly(True)
         self._detail.setPlaceholderText("Pilih satu baris untuk melihat rinciannya.")
-        layout.addWidget(self._detail)
-        return panel
+        tab.addTab(self._detail, "Rincian baris")
+
+        self._assets_panel = AssetsPanel()
+        self._assets_panel.changed.connect(self._on_assets_changed)
+        tab.addTab(self._assets_panel, "Berkas")
+        self._tab = tab
+        return tab
 
     def _build_action_bar(self) -> QHBoxLayout:
         bar = QHBoxLayout()
@@ -300,6 +302,7 @@ class MainWindow(QMainWindow):
         for row in rows:
             row.issues = validate(row.data, catalog=self._catalog)
 
+        self._assets_panel.set_assets(Assets.load(path))
         restored = state.apply(path, rows)
 
         self._workbook_path = path
@@ -349,7 +352,8 @@ class MainWindow(QMainWindow):
         self._set_sedang_jalan(True)
         self.statusBar().showMessage(pesan)
 
-        self._worker = RunWorker(data, self._mode.currentData(), CDP_DEFAULT, self)
+        self._worker = RunWorker(data, self._mode.currentData(), CDP_DEFAULT,
+                                 self._assets_panel.assets(), self)
         self._worker.langkah.connect(self._on_langkah)
         self._worker.selesai.connect(self._on_selesai)
         self._worker.finished.connect(lambda: self._set_sedang_jalan(False))
@@ -423,10 +427,18 @@ class MainWindow(QMainWindow):
         indexes = self._table.selectionModel().selectedRows()
         if not indexes:
             self._detail.clear()
+            self._assets_panel.set_baris(None)
             return
         row = self._model.row_at(indexes[0].row())
         if row:
             self._detail.setPlainText(self._describe(row))
+            self._assets_panel.set_baris(row.excel_row, row.nama)
+
+    def _on_assets_changed(self) -> None:
+        """Simpan pilihan berkas di sebelah workbook, lalu perbarui ringkasan."""
+        if self._workbook_path:
+            self._assets_panel.assets().save(self._workbook_path)
+        self._update_summary()
         self._btn_satu.setEnabled(self._baris_siap())
 
     def _describe(self, row) -> str:
@@ -447,11 +459,17 @@ class MainWindow(QMainWindow):
             lines.append("Atribut khusus kategori:")
             lines += [f"  • {nama}: {nilai or '(kosong)'}" for nama, nilai in atribut.items()]
 
-        lampiran = row.lampiran
-        if lampiran:
-            lines.append("")
-            lines.append("Lampiran dokumen:")
-            lines += [f"  • {nama}: {berkas}" for nama, berkas in lampiran.items()]
+        assets = self._assets_panel.assets()
+        foto = assets.foto_untuk(row.excel_row)
+        lines.append("")
+        lines.append(f"Foto ({len(foto)}): " + (
+            ", ".join(Path(f).name for f in foto) or "belum dipilih — lihat tab Berkas"))
+        if assets.dokumen:
+            lines.append("Dokumen:")
+            lines += [f"  • {n}: {Path(b).name}"
+                      for n, b in sorted(assets.dokumen.items())]
+        else:
+            lines.append("Dokumen: belum dipilih — lihat tab Berkas")
 
         errors = row.blocking_issues
         warnings = [i for i in row.issues if not i.blocking]
@@ -472,9 +490,13 @@ class MainWindow(QMainWindow):
         counts = self._model.tally()
         siap = len(self._model.pending_positions())
         bermasalah = sum(1 for row in self._model.rows() if row.blocking_issues)
+        # Berkas berlaku untuk semua baris, jadi masalahnya disebut sekali di
+        # ringkasan -- bukan diulang di tiap baris tabel.
+        berkas = self._assets_panel.assets().masalah()
+        catatan = f" · berkas: {len(berkas)} perlu dibereskan" if berkas else ""
         self._summary.setText(
             f"{counts[Status.SUKSES]} sukses · {counts[Status.GAGAL]} gagal · "
-            f"{siap} siap dijalankan · {bermasalah} perlu diperbaiki"
+            f"{siap} siap dijalankan · {bermasalah} perlu diperbaiki{catatan}"
         )
 
     def _set_connection_status(self, connected: bool) -> None:

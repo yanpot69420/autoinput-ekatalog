@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .schema import attachment_pairs, attribute_pairs, split_category
+from .schema import attribute_pairs, split_category
 
 
 class Status(str, Enum):
@@ -69,10 +69,6 @@ class ProductRow:
     @property
     def atribut(self) -> dict[str, str]:
         return attribute_pairs(self.data)
-
-    @property
-    def lampiran(self) -> dict[str, str]:
-        return attachment_pairs(self.data)
 
     @property
     def blocking_issues(self) -> list:

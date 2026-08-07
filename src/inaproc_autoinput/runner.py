@@ -20,9 +20,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+from .assets import Assets
 from .schema import (
     TIPE_BARANG,
-    attachment_pairs,
     attribute_pairs,
     split_category,
 )
@@ -270,7 +270,10 @@ class ProductFormFiller:
 
     # --- alur utama ---------------------------------------------------------
 
-    def isi(self, data: dict) -> None:
+    def isi(self, data: dict, assets: Assets | None = None) -> None:
+        assets = assets or Assets()
+        foto = assets.foto_untuk(int(data.get("_row") or 0))
+
         self.pilih_kategori(_teks(data.get("kategori")))
         tipe = self.baca_tipe_produk()
         if tipe:
@@ -280,9 +283,9 @@ class ProductFormFiller:
         self._isi(SEL_DESKRIPSI, _teks(data.get("deskripsi")), "Deskripsi")
 
         for nomor in range(1, 6):
-            self._unggah(SEL_FOTO.format(nomor - 1), _teks(data.get(f"foto_{nomor}")),
-                         f"Foto {nomor}")
-        self._unggah(SEL_VIDEO, _teks(data.get("video_berkas")), "Video")
+            berkas = foto[nomor - 1] if nomor <= len(foto) else ""
+            self._unggah(SEL_FOTO.format(nomor - 1), _teks(berkas), f"Foto {nomor}")
+        self._unggah(SEL_VIDEO, _teks(assets.video), "Video")
         self._isi(SEL_VIDEO_URL, _teks(data.get("video_url")), "URL Video")
 
         self._pilih_dropdown(self._dropdown_dekat("Kode KBKI"),
@@ -315,7 +318,7 @@ class ProductFormFiller:
             self._isi_pengiriman(data)
 
         self.isi_atribut(attribute_pairs(data))
-        self.isi_lampiran(attachment_pairs(data))
+        self.isi_lampiran(dict(assets.dokumen))
 
     def _isi_pengiriman(self, data: dict) -> None:
         for kunci, label in (
@@ -419,14 +422,15 @@ class BrowserRunner:
             state="visible", timeout=TIMEOUT_PANJANG
         )
 
-    def jalankan(self, data: dict, mode: Mode = Mode.ISI_SAJA, catatan=None) -> Hasil:
+    def jalankan(self, data: dict, mode: Mode = Mode.ISI_SAJA, catatan=None,
+                 assets: Assets | None = None) -> Hasil:
         if not self.siap():
             return Hasil(False, "Browser belum tersambung")
 
         pengisi = ProductFormFiller(self.page, catatan)
         try:
             self.buka_form()
-            pengisi.isi(data)
+            pengisi.isi(data, assets)
             produk_id = pengisi.simpan(mode)
         except RunnerError as error:
             return Hasil(False, str(error), langkah=pengisi.langkah,

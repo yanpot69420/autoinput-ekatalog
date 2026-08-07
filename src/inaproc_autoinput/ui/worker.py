@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QThread, Signal
 
+from ..assets import Assets
 from ..runner import BrowserRunner, Hasil, Mode, RunnerError
 
 
@@ -18,11 +19,13 @@ class RunWorker(QThread):
     langkah = Signal(str)
     selesai = Signal(object)  # Hasil
 
-    def __init__(self, data: dict | None, mode: Mode, cdp_url: str, parent=None):
+    def __init__(self, data: dict | None, mode: Mode, cdp_url: str,
+                 assets: Assets | None = None, parent=None):
         super().__init__(parent)
         self._data = data
         self._mode = mode
         self._cdp_url = cdp_url
+        self._assets = assets
 
     def run(self) -> None:  # dipanggil Qt di thread baru
         runner = BrowserRunner(self._cdp_url)
@@ -43,7 +46,8 @@ class RunWorker(QThread):
                 return
             self.langkah.emit("Membuka halaman tambah produk…")
             self.selesai.emit(
-                runner.jalankan(self._data, self._mode, catatan=self.langkah.emit)
+                runner.jalankan(self._data, self._mode,
+                                catatan=self.langkah.emit, assets=self._assets)
             )
         finally:
             runner.close()

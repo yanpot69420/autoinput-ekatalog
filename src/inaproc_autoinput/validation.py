@@ -1,8 +1,11 @@
 """Pemeriksaan baris produk sebelum dijalankan ke portal.
 
 Semua yang bisa diketahui tanpa membuka portal diperiksa di sini. Mengisi satu
-produk lewat form makan waktu setengah sampai satu menit; menemukan berkas foto
-yang salah ketik pathnya di detik ke-50 itu pemborosan yang bisa dihindari.
+produk lewat form makan waktu setengah sampai satu menit; menemukan kategori
+yang salah ketik di detik ke-50 itu pemborosan yang bisa dihindari.
+
+Yang diperiksa hanya isi baris Excel. Berkas -- foto, video, dokumen PDF --
+diperiksa terpisah di `assets.py`, karena berlaku untuk semua baris sekaligus.
 """
 
 from __future__ import annotations
@@ -15,7 +18,6 @@ from .schema import (
     TIPE_BARANG,
     Field,
     all_fields,
-    attachment_pairs,
     attribute_pairs,
     incomplete_pairs,
     split_category,
@@ -160,28 +162,14 @@ def _check_category(row: dict, catalog) -> tuple[list[Issue], str]:
 
 
 def _check_pairs(row: dict) -> list[Issue]:
-    """Blok atribut dan lampiran: slot harus terisi lengkap atau kosong sama sekali."""
+    """Blok atribut: slot harus terisi lengkap atau kosong sama sekali."""
     issues: list[Issue] = []
-    for jenis, nama, nilai in incomplete_pairs(row):
-        label = "Atribut" if jenis == "atribut" else "Dokumen"
+    for _, nama, nilai in incomplete_pairs(row):
         if nama:
-            kurang = "nilainya" if jenis == "atribut" else "path berkasnya"
-            issues.append(Issue(nama, f"{label} '{nama}'", f"{kurang} belum diisi"))
+            issues.append(Issue(nama, f"Atribut '{nama}'", "nilainya belum diisi"))
         else:
             issues.append(Issue(
-                jenis, label,
-                f"'{nilai}' diisi tapi nama {label.lower()}nya kosong",
-            ))
-
-    from .schema import DOKUMEN_EXT
-
-    for nama, berkas in attachment_pairs(row).items():
-        path = Path(berkas).expanduser()
-        if path.suffix.lower() not in DOKUMEN_EXT:
-            issues.append(Issue(nama, f"Dokumen '{nama}'", "berkas harus .pdf"))
-        elif not path.exists():
-            issues.append(Issue(
-                nama, f"Dokumen '{nama}'", f"berkas tidak ditemukan: {path}"
+                "atribut", "Atribut", f"'{nilai}' diisi tapi nama atributnya kosong"
             ))
     return issues
 
@@ -204,11 +192,6 @@ def validate(
         issues.extend(_check_field(fld, row, tipe))
 
     issues.extend(_check_pairs(row))
-
-    if all(_blank(row.get(f"foto_{i}")) for i in range(1, 6)):
-        issues.append(
-            Issue("foto_1", "Foto Produk", "produk wajib punya minimal satu foto")
-        )
 
     if not attribute_pairs(row):
         issues.append(Issue(

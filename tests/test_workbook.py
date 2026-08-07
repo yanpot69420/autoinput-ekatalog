@@ -7,7 +7,7 @@ from openpyxl.utils import get_column_letter
 
 from inaproc_autoinput import references as ref
 from inaproc_autoinput import workbook
-from inaproc_autoinput.schema import all_fields, attachment_pairs, attribute_pairs
+from inaproc_autoinput.schema import all_fields, attribute_pairs
 from inaproc_autoinput.workbook import FIRST_DATA_ROW, ROW_LABEL, SHEET_PRODUK
 
 
@@ -23,7 +23,9 @@ def test_template_punya_semua_kolom(tmp_path):
     assert len(labels) == len(all_fields())
     assert "Nama Produk" in labels
     assert "Atribut 1" in labels and "Nilai 1" in labels
-    assert "Dokumen 1" in labels and "Berkas 1" in labels
+    # Berkas dipilih di aplikasi, bukan diketik di Excel.
+    assert not [l for l in labels if l.startswith(("Foto", "Dokumen", "Berkas"))]
+    assert "Video Produk" not in labels
     assert "Berat Produk (gram)" in labels  # khusus kategori Barang
 
 
@@ -35,8 +37,6 @@ def test_template_menandai_kolom_wajib(tmp_path):
         for i in range(1, ws.max_column + 1)
     }
     assert keterangan["Nama Produk"] == "(Wajib)"
-    assert keterangan["Foto Utama"] == "(Wajib)"
-    assert keterangan["Foto 2"] == "(Opsional)"
     assert keterangan["Tipe Produk"] == "(Opsional)"  # portal menentukannya sendiri
 
 
@@ -109,7 +109,7 @@ def test_template_punya_sheet_petunjuk(tmp_path):
     teks = "\n".join(
         str(c.value) for row in wb[workbook.SHEET_PETUNJUK].iter_rows() for c in row
     )
-    assert "minimal satu foto" in teks
+    assert "tab 'Berkas' di aplikasi" in teks  # berkas tidak lagi di Excel
 
 
 def _isi(path, baris: list[dict]):
@@ -135,8 +135,6 @@ def test_baca_kembali_yang_sudah_diisi(tmp_path):
             "Harga Produk": 85000,
             "Atribut 1": "Satuan Pengukuran",
             "Nilai 1": "M3",
-            "Dokumen 1": "Sertifikat Standar",
-            "Berkas 1": "/tmp/sbu.pdf",
         },
         {"Nama Produk": "Timbunan Pilihan dari Sumber Galian"},
     ])
@@ -147,7 +145,6 @@ def test_baca_kembali_yang_sudah_diisi(tmp_path):
     assert rows[0]["nama_produk"] == "Galian Biasa untuk Badan Jalan"
     assert rows[0]["harga_produk"] == "85000"
     assert attribute_pairs(rows[0]) == {"Satuan Pengukuran": "M3"}
-    assert attachment_pairs(rows[0]) == {"Sertifikat Standar": "/tmp/sbu.pdf"}
     assert rows[1]["_row"] == FIRST_DATA_ROW + 1
 
 

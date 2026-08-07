@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from inaproc_autoinput.assets import Assets
 from inaproc_autoinput.runner import (
     CDP_DEFAULT,
     BrowserRunner,
@@ -158,15 +159,20 @@ def _baris(berkas) -> dict:
         "atribut_1_nilai": "M3",
         "atribut_2_nama": "Kode Produk",
         "atribut_2_nilai": "BNS-GAL-01",
-        "dokumen_1_nama": "Sertifikat Standar",
-        "dokumen_1_berkas": berkas["pdf"],
     }
+
+
+def _assets(berkas, foto=None):
+    """Berkas kini dipilih lewat panel aplikasi, bukan kolom Excel."""
+    a = Assets(foto_umum=[foto or berkas["foto"]])
+    a.set_dokumen("Sertifikat Standar", berkas["pdf"])
+    return a
 
 
 @pytestmark_browser
 def test_isi_satu_baris_penuh(halaman, berkas):
     pengisi = ProductFormFiller(halaman)
-    pengisi.isi(_baris(berkas))
+    pengisi.isi(_baris(berkas), _assets(berkas))
 
     nilai = halaman.evaluate(
         """() => ({
@@ -242,16 +248,16 @@ def test_kategori_kurang_lengkap_ditolak(halaman):
 
 @pytestmark_browser
 def test_berkas_hilang_melempar_error(halaman, berkas):
-    data = dict(_baris(berkas), foto_1="/tidak/ada/galian.png")
+    hilang = _assets(berkas, foto="/tidak/ada/galian.png")
     pengisi = ProductFormFiller(halaman)
     with pytest.raises(RunnerError, match="berkas tidak ada"):
-        pengisi.isi(data)
+        pengisi.isi(_baris(berkas), hilang)
 
 
 @pytestmark_browser
 def test_mode_isi_saja_tidak_menekan_tombol(halaman, berkas):
     pengisi = ProductFormFiller(halaman)
-    pengisi.isi(_baris(berkas))
+    pengisi.isi(_baris(berkas), _assets(berkas))
     assert pengisi.simpan(Mode.ISI_SAJA) == ""
     assert halaman.locator("#hasil").inner_text() == ""
 
@@ -259,7 +265,7 @@ def test_mode_isi_saja_tidak_menekan_tombol(halaman, berkas):
 @pytestmark_browser
 def test_mode_simpan_draf_menekan_tombol_draf(halaman, berkas):
     pengisi = ProductFormFiller(halaman)
-    pengisi.isi(_baris(berkas))
+    pengisi.isi(_baris(berkas), _assets(berkas))
     produk_id = pengisi.simpan(Mode.SIMPAN_DRAF)
     assert halaman.locator("#hasil").inner_text() == "DIKLIK: Simpan Draf Produk"
     assert produk_id == "abc12345def"

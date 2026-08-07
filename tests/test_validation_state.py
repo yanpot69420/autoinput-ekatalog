@@ -9,26 +9,12 @@ from inaproc_autoinput.model import ProductRow, Status, rows_from_records
 from inaproc_autoinput.validation import validate
 
 
-@pytest.fixture(scope="module")
-def berkas(tmp_path_factory):
-    """Berkas contoh yang benar-benar ada, karena validator memeriksa keberadaannya."""
-    root = tmp_path_factory.mktemp("berkas")
-    foto = root / "galian.png"
-    foto.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 100)
-    dokumen = root / "sbu.pdf"
-    dokumen.write_bytes(b"%PDF-1.4\n" + b"0" * 100)
-    besar = root / "besar.pdf"
-    besar.write_bytes(b"%PDF-1.4\n" + b"0" * (11 * 1024 * 1024))
-    return {"foto": str(foto), "pdf": str(dokumen), "pdf_besar": str(besar)}
-
-
 @pytest.fixture
-def lengkap(berkas):
+def lengkap():
     return {
         "kategori": "Bidang Bina Marga > Divisi 3 Pekerjaan Tanah dan Geosintetik > 3.1 Galian",
         "produk_sektoral": "Galian Biasa",
         "nama_produk": "Galian Biasa untuk Badan Jalan",
-        "foto_1": berkas["foto"],
         "kbki": "54310",
         "pdn_klasifikasi": "Lokal",
         "pdn_lokasi_produksi": "Diproduksi di seluruh Indonesia",
@@ -40,8 +26,6 @@ def lengkap(berkas):
         "satuan_produk": "Meter",
         "atribut_1_nama": "Satuan Pengukuran",
         "atribut_1_nilai": "M3",
-        "dokumen_1_nama": "Sertifikat Standar",
-        "dokumen_1_berkas": berkas["pdf"],
     }
 
 
@@ -115,47 +99,6 @@ def test_pre_order_hari_wajib_saat_aktif(lengkap):
     assert any(i.key == "pre_order_hari" for i in _errors(dict(lengkap, pre_order="Aktif")))
 
 
-# --- berkas -----------------------------------------------------------------
-
-
-def test_produk_tanpa_foto_ditolak(lengkap):
-    row = {k: v for k, v in lengkap.items() if k != "foto_1"}
-    assert any(i.key == "foto_1" for i in _errors(row))
-
-
-def test_foto_berupa_tautan_ditolak(lengkap):
-    """Form meminta unggah berkas, bukan tautan seperti pada unggah massal."""
-    row = dict(lengkap, foto_1="https://i.imgur.com/ErNwW2p.png")
-    assert any(i.key == "foto_1" for i in _errors(row))
-
-
-def test_foto_tidak_ada_di_disk_ditolak(lengkap):
-    row = dict(lengkap, foto_1="/tidak/ada/galian.png")
-    pesan = [i.message for i in _errors(row) if i.key == "foto_1"]
-    assert pesan and "tidak ditemukan" in pesan[0]
-
-
-def test_foto_format_salah_ditolak(lengkap, berkas):
-    row = dict(lengkap, foto_1=berkas["pdf"])
-    pesan = [i.message for i in _errors(row) if i.key == "foto_1"]
-    assert pesan and "format harus" in pesan[0]
-
-
-def test_dokumen_melebihi_batas_ukuran_ditolak(lengkap, berkas):
-    row = dict(lengkap, video_berkas=berkas["pdf_besar"])
-    assert any(i.key == "video_berkas" for i in _errors(row))
-
-
-def test_dokumen_bukan_pdf_ditolak(lengkap, berkas):
-    row = dict(lengkap, dokumen_1_berkas=berkas["foto"])
-    assert any("Sertifikat Standar" in i.label for i in _errors(row))
-
-
-def test_dokumen_hilang_di_disk_ditolak(lengkap):
-    row = dict(lengkap, dokumen_1_berkas="/tidak/ada/sbu.pdf")
-    assert any("tidak ditemukan" in i.message for i in _errors(row))
-
-
 # --- blok berpasangan -------------------------------------------------------
 
 
@@ -167,11 +110,6 @@ def test_atribut_bernama_tanpa_nilai_ditolak(lengkap):
 def test_nilai_tanpa_nama_atribut_ditolak(lengkap):
     row = dict(lengkap, atribut_2_nama="", atribut_2_nilai="M3")
     assert any("nama atributnya kosong" in i.message for i in _errors(row))
-
-
-def test_dokumen_bernama_tanpa_berkas_ditolak(lengkap):
-    row = dict(lengkap, dokumen_2_nama="Sertifikat Standar", dokumen_2_berkas="")
-    assert any("path berkasnya" in i.message for i in _errors(row))
 
 
 def test_tanpa_atribut_hanya_peringatan(lengkap):
@@ -226,7 +164,6 @@ def test_tanpa_berkas_status_tidak_error(tmp_path, lengkap):
     assert state.apply(tmp_path / "belum-ada.xlsx", _rows(lengkap)) == 0
 
 
-def test_lampiran_terbaca_dari_baris(lengkap, berkas):
+def test_atribut_terbaca_dari_baris(lengkap):
     row = rows_from_records([dict(lengkap, _row=5)])[0]
-    assert row.lampiran == {"Sertifikat Standar": berkas["pdf"]}
     assert row.atribut == {"Satuan Pengukuran": "M3"}
