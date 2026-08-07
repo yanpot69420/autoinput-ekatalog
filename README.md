@@ -62,6 +62,14 @@ Lalu buat pintasan yang bisa diklik dua kali dari Finder atau Dock:
 ./scripts/buat-shortcut.sh
 ```
 
+Menghasilkan **INAPROC Autoinput.app** lengkap dengan ikonnya. Beri argumen
+untuk menaruhnya di tempat lain, misalnya `./scripts/buat-shortcut.sh ~/Applications`
+supaya muncul di Launchpad dan Spotlight.
+
+Bundle-nya hanya penunjuk ke folder proyek, bukan salinan — setiap perbaikan
+kode langsung ikut terpakai tanpa perlu dibuat ulang. Karena memuat path
+absolut mesin pembuatnya, bundle itu sendiri tidak ikut ke repositori.
+
 Atau jalankan langsung dari terminal:
 
 ```bash

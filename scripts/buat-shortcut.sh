@@ -22,7 +22,14 @@ if [ ! -x "$PYTHON" ]; then
 fi
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+
+# Ikon dibuat sendiri lewat iconutil bawaan macOS. Kalau gagal, pintasan tetap
+# jadi -- cuma memakai ikon generik.
+IKON=""
+if python3 "$PROYEK/scripts/buat-ikon.py" "$APP/Contents/Resources/ikon.icns" >/dev/null 2>&1; then
+  IKON="  <key>CFBundleIconFile</key><string>ikon</string>"
+fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -37,6 +44,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>jalankan</string>
+$IKON
   <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
@@ -52,6 +60,7 @@ LAUNCHER
 chmod +x "$APP/Contents/MacOS/jalankan"
 
 echo "Pintasan dibuat: $APP"
+[ -n "$IKON" ] || echo "  (ikon dilewati; memakai ikon generik)"
 echo
 echo "Klik dua kali untuk menjalankan. Supaya menetap di Dock, jalankan sekali,"
 echo "lalu klik kanan ikonnya di Dock -> Options -> Keep in Dock."
