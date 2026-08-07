@@ -24,6 +24,7 @@ import pytest
 from inaproc_autoinput.assets import Assets
 from inaproc_autoinput.runner import (
     CDP_DEFAULT,
+    SEL_KATEGORI,
     BrowserRunner,
     Dibatalkan,
     Mode,
@@ -258,6 +259,39 @@ def test_label_atribut_mengikuti_kategori(halaman, berkas):
 
     pengisi.pilih_kategori("Peralatan Kantor > Furnitur Kantor > Meja Kerja")
     assert pengisi.label_atribut() == ["Satuan Pengukuran", "Bahan Utama"]
+
+
+@pytestmark_browser
+def test_ketik_memasang_teks_utuh_dan_menekan_huruf_terakhir(halaman):
+    """Pengetikan cepat tidak boleh mengorbankan penekanan tombol terakhir.
+
+    Komponen pencarian yang menyimak keydown -- bukan perubahan nilai -- harus
+    tetap terpicu, karena itu huruf penghabisan tetap diketik sungguhan.
+    """
+    pengisi = ProductFormFiller(halaman)
+    kotak = halaman.locator(SEL_KATEGORI).first
+    kotak.click()
+    halaman.evaluate(
+        """(sel) => {
+             const el = document.querySelector(sel);
+             window.__keydown = 0;
+             el.addEventListener('keydown', () => window.__keydown++);
+           }""",
+        SEL_KATEGORI,
+    )
+
+    pengisi._ketik(kotak, "Meja Kerja")
+    assert kotak.input_value() == "Meja Kerja"
+    assert halaman.evaluate("() => window.__keydown") == 1
+
+
+@pytestmark_browser
+def test_ketik_teks_kosong_tidak_menyentuh_kotak(halaman):
+    pengisi = ProductFormFiller(halaman)
+    kotak = halaman.locator(SEL_KATEGORI).first
+    kotak.fill("sisa")
+    pengisi._ketik(kotak, "")
+    assert kotak.input_value() == "sisa"
 
 
 @pytestmark_browser

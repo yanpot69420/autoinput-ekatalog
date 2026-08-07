@@ -59,6 +59,12 @@ TOMBOL_SIMPAN = "Simpan"
 
 TIMEOUT_PENDEK = 8_000
 TIMEOUT_PANJANG = 25_000
+# Batas menunggu halaman berpindah setelah tombol simpan diklik. Lebih pendek
+# dari TIMEOUT_PENDEK karena form yang ditolak portal memang tidak berpindah,
+# dan menunggu delapan detik untuk memastikannya cuma menghukum kegagalan.
+TIMEOUT_SIMPAN = 6_000
+
+POLA_PRODUK = re.compile(r"/products/[0-9a-f-]{8,}")
 
 
 class Mode(str, Enum):
@@ -200,12 +206,34 @@ class ProductFormFiller:
         elemen.fill(nilai)
         self._catat(f"{label}: {nilai[:60]}")
 
+    def _ketik(self, kotak, teks: str) -> None:
+        """Isi kotak pencarian tanpa membayar satu perjalanan per karakter.
+
+        `keyboard.type` mengirim tiap huruf sebagai pesan tersendiri ke browser.
+        Untuk nama kategori sepanjang 95 karakter itu sembilan puluh lima kali
+        bolak-balik -- terukur dua detik untuk satu kotak, dan ada tujuh kotak
+        per baris.
+
+        Karakter terakhir tetap diketik sungguhan. Komponen pencarian yang
+        menyimak penekanan tombol, bukan perubahan nilai, tetap terpicu; sisanya
+        dipasang sekaligus. Bila kotaknya menolak diisi langsung, seluruhnya
+        kembali diketik seperti semula.
+        """
+        if not teks:
+            return
+        try:
+            kotak.fill(teks[:-1])
+        except Exception:  # noqa: BLE001 -- kotak tak biasa, ketik saja semuanya
+            self.page.keyboard.type(teks)
+            return
+        self.page.keyboard.type(teks[-1])
+
     def _pilih_dropdown(self, pembuka, nilai: str, label: str) -> None:
         """react-select: klik, ketik, lalu pilih opsi yang cocok."""
         if not nilai:
             return
         pembuka.click()
-        self.page.keyboard.type(nilai, delay=15)
+        self._ketik(pembuka, nilai)
         # Hanya opsi yang terlihat. Menu lain yang sudah ditutup tetap ada di DOM,
         # dan kalau ikut terjaring, penantian akan macet pada elemen tersembunyi.
         opsi = self.page.locator(SEL_OPSI_TERLIHAT)
@@ -247,7 +275,7 @@ class ProductFormFiller:
         kotak = self.page.locator(SEL_KATEGORI).first
         kotak.click()
         kotak.fill("")
-        self.page.keyboard.type(tiga, delay=20)
+        self._ketik(kotak, tiga)
 
         for tingkat, nama in ((1, satu), (2, dua), (3, tiga)):
             pilihan = self.page.get_by_text(nama, exact=True).locator("visible=true")
@@ -265,8 +293,24 @@ class ProductFormFiller:
         if konfirmasi.count():
             konfirmasi.first.click()
 
-        self.page.wait_for_timeout(1_500)  # bagian baru dirender setelah kategori
+        self._tunggu_form_kategori()
         self._catat(f"Kategori: {jalur}")
+
+    def _tunggu_form_kategori(self) -> None:
+        """Tunggu bagian yang baru dirender setelah kategori dipilih.
+
+        Dulu dijeda 1,5 detik pukul rata. Jeda tetap selalu salah di kedua arah:
+        dibayar penuh walau formnya sudah siap dalam dua ratus milidetik, dan
+        tetap kurang saat portal sedang lambat. Yang ditunggu sekarang tandanya
+        -- kolom atribut atau keterangan tipe produk, dua hal yang cuma muncul
+        setelah kategorinya terpasang.
+        """
+        try:
+            self.page.locator(
+                f'{SEL_ATRIBUT_UTAMA}, :text-matches("termasuk jenis Produk")'
+            ).first.wait_for(state="visible", timeout=TIMEOUT_PENDEK)
+        except Exception:  # noqa: BLE001 -- kategori tanpa atribut maupun keterangan
+            self.page.wait_for_timeout(1_000)
 
     def baca_tipe_produk(self) -> str:
         """Portal menuliskan 'Kategori ini termasuk jenis Produk Jasa'."""
@@ -277,14 +321,22 @@ class ProductFormFiller:
         return cocok.group(1) if cocok else ""
 
     def label_atribut(self) -> list[str]:
-        """Label bagian Informasi Utama, berurut sesuai indeks di form."""
+        """Label bagian Informasi Utama, berurut sesuai indeks di form.
+
+        Dibaca sekali jalan lewat evaluate. Menanyakan dua atribut per elemen
+        satu per satu berarti enam belas perjalanan ke browser untuk delapan
+        kolom, dan hasilnya sama persis.
+        """
+        pasangan = self.page.evaluate(
+            """(sel) => [...document.querySelectorAll(sel)]
+                 .map(el => [el.getAttribute('name') || '',
+                             el.getAttribute('placeholder') || ''])""",
+            SEL_ATRIBUT_UTAMA,
+        )
         hasil: list[str] = []
-        for elemen in self.page.locator(SEL_ATRIBUT_UTAMA).all():
-            nama = elemen.get_attribute("name") or ""
-            cocok = re.search(r"\.(\d+)\.value$", nama)
-            if not cocok:
+        for nama, petunjuk in pasangan:
+            if not re.search(r"\.(\d+)\.value$", nama):
                 continue
-            petunjuk = elemen.get_attribute("placeholder") or ""
             hasil.append(re.sub(r"^Masukkan\s+", "", petunjuk).strip())
         return hasil
 
@@ -445,11 +497,18 @@ class ProductFormFiller:
             raise RunnerError(f"Tombol '{nama}' tidak aktif — form belum lengkap")
 
         tombol.first.click()
-        self.page.wait_for_timeout(3_000)
+        # Tandanya alamat halaman berpindah ke /products/<id>. Ditunggu sampai
+        # itu terjadi, bukan dihitung tiga detik pukul rata -- form yang ditolak
+        # portal memang tidak pernah berpindah, jadi jeda tetap itu selalu
+        # terlalu lama saat berhasil dan belum tentu cukup saat portal lambat.
+        try:
+            self.page.wait_for_url(POLA_PRODUK, timeout=TIMEOUT_SIMPAN)
+        except Exception:  # noqa: BLE001 -- draf tidak selalu berpindah halaman
+            self.page.wait_for_timeout(1_000)
         self._catat(f"Diklik: {nama}")
 
-        cocok = re.search(r"/products/([0-9a-f-]{8,})", self.page.url)
-        return cocok.group(1) if cocok else ""
+        cocok = POLA_PRODUK.search(self.page.url)
+        return cocok.group(0).rsplit("/", 1)[1] if cocok else ""
 
 
 def _normalisasi(teks: str) -> str:
