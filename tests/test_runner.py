@@ -235,15 +235,34 @@ def test_isi_satu_baris_penuh(halaman, berkas):
     assert nilai["atribut"][:2] == ["M3", "BNS-GAL-01"]
     # Dokumen 'Sertifikat Standar' ada di urutan kedua pada kategori ini.
     assert nilai["dokumenAda"] == [0, 1]
-    # Stok 1000 bulat -> kuantitas desimal tidak perlu dinyalakan.
-    assert nilai["desimal"] is False
+    # Kolom kuantitas desimal muncul pada kategori ini, jadi dinyalakan --
+    # tanpa memandang stoknya bulat atau pecahan.
+    assert nilai["desimal"] is True
 
 
 @pytestmark_browser
-def test_kuantitas_desimal_disimpulkan_dari_stok(halaman, berkas):
-    """Tidak ada kolomnya di Excel; nilainya disimpulkan dari angka stok."""
+def test_kuantitas_desimal_dinyalakan_apa_pun_stoknya(halaman, berkas):
+    """Portal hanya memunculkan kolomnya pada kategori yang membolehkan pecahan.
+
+    Kemunculannya sendiri sudah jadi jawabannya. Dulu disimpulkan dari ada
+    tidaknya desimal pada stok -- tapi stok bulat hari ini bukan jaminan stok
+    bulat selamanya, dan saklar yang mati membuat pecahan tidak bisa dimasukkan
+    sama sekali.
+    """
+    nyala = ("() => document.getElementById"
+             "('form-product-decimal-qty-switch').checked")
+
     pengisi = ProductFormFiller(halaman)
     pengisi.isi(dict(_baris(berkas), stok="332,35"), _assets(berkas))
+    assert halaman.evaluate(nyala) is True
+
+
+@pytestmark_browser
+def test_kuantitas_desimal_tidak_dimatikan_bila_sudah_menyala(halaman, berkas):
+    """Menyalakan yang sudah menyala berarti mematikannya."""
+    halaman.evaluate(
+        "() => document.getElementById('form-product-decimal-qty-switch').click()")
+    ProductFormFiller(halaman).isi(_baris(berkas), _assets(berkas))
     assert halaman.evaluate(
         "() => document.getElementById('form-product-decimal-qty-switch').checked"
     ) is True

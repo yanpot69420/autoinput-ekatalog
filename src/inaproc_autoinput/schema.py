@@ -143,24 +143,6 @@ CORE_FIELDS: tuple[Field, ...] = (
 )
 
 
-def perlu_kuantitas_desimal(row: dict) -> bool:
-    """Apakah saklar Kuantitas Desimal perlu dinyalakan untuk baris ini.
-
-    Disimpulkan, bukan ditanyakan: stok 332,35 jelas butuh desimal, stok 1
-    tidak. Menanyakannya lewat kolom cuma menambah satu hal yang bisa salah
-    tanpa menambah keputusan.
-    """
-    for kunci in ("stok", "minimum_pembelian"):
-        teks = str(row.get(kunci, "") or "").strip().replace(",", ".")
-        if "." in teks:
-            try:
-                if float(teks) != int(float(teks)):
-                    return True
-            except ValueError:
-                continue
-    return False
-
-
 def attribute_fields(slots: int = JUMLAH_SLOT_ATRIBUT) -> tuple[Field, ...]:
     """Pasangan Atribut/Nilai untuk Spesifikasi Produk > Informasi Utama."""
     out: list[Field] = []
@@ -230,7 +212,6 @@ __all__ = [
     "TIPE_PRODUK",
     "VIDEO_EXT",
     "all_fields",
-    "perlu_kuantitas_desimal",
     "attribute_fields",
     "attribute_pairs",
     "by_key",

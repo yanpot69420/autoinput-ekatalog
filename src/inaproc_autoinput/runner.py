@@ -24,7 +24,6 @@ from .assets import Assets
 from .schema import (
     TIPE_BARANG,
     attribute_pairs,
-    perlu_kuantitas_desimal,
     split_category,
 )
 
@@ -593,8 +592,13 @@ class ProductFormFiller:
             if nilai:
                 self._saklar(selector, nilai in SAKLAR_NYALA, kunci)
 
-        if perlu_kuantitas_desimal(data):
-            self._saklar(SEL_KUANTITAS_DESIMAL, True, "Kuantitas Desimal")
+        # Selalu dinyalakan bila kolomnya muncul. Portal hanya memunculkannya
+        # pada kategori yang memang membolehkan kuantitas pecahan, jadi
+        # kemunculannya sendiri sudah menjadi jawabannya. Dulu disimpulkan dari
+        # ada tidaknya desimal pada stok -- tapi stok bulat hari ini bukan
+        # jaminan stok bulat selamanya, dan saklar yang mati membuat penyedia
+        # tidak bisa memasukkan pecahan sama sekali.
+        self._saklar(SEL_KUANTITAS_DESIMAL, True, "Kuantitas Desimal")
 
         self._isi(SEL_MIN_BELI, _angka(data.get("minimum_pembelian")),
                   "Minimum Pembelian")

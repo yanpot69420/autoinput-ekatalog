@@ -357,6 +357,11 @@ Sembilan kolom dibuang setelah diuji terhadap file 51 pekerjaan nyata, di mana
 | Kuantitas Desimal | Disimpulkan dari angka stok: 332,35 butuh desimal, 1 tidak |
 | URL Video Produk | Pindah ke tab Berkas, berdampingan dengan berkas videonya |
 
+Saklar **Pengaturan Kuantitas Desimal** dinyalakan sendiri setiap kali kolomnya
+muncul. Tidak ada kolomnya di Excel dan memang tidak perlu: portal hanya
+memunculkan saklar itu pada kategori yang membolehkan kuantitas pecahan, jadi
+kemunculannya sudah menjadi jawabannya.
+
 **8 pasang `Atribut n` / `Nilai n`** — untuk bagian *Spesifikasi Produk →
 Informasi Utama*, yang isinya berbeda tiap Kategori Level 3. Di form bentuknya
 array berindeks (`productInformations.mainInformations.<n>.value`), bukan field
