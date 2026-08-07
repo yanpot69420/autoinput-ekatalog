@@ -152,12 +152,6 @@ def _check_category(row: dict, catalog) -> tuple[list[Issue], str]:
             blocking=False,
         ))
 
-    tipe = str(row.get("tipe_produk", "") or "").strip()
-    if tipe and tipe != node.tipe_produk:
-        issues.append(Issue(
-            "tipe_produk", "Tipe Produk",
-            f"kategori ini terdaftar sebagai {node.tipe_produk}, bukan {tipe}",
-        ))
     return issues, node.tipe_produk
 
 
@@ -179,12 +173,14 @@ def validate(
 ) -> list[Issue]:
     fields = fields or all_fields()
     issues: list[Issue] = []
-    tipe = str(row.get("tipe_produk", "") or "").strip()
+    # Tipe produk hanya datang dari katalog portal. Tidak ada kolomnya di Excel
+    # karena portal yang menentukan, dan menyalinnya ke spreadsheet cuma
+    # membuka peluang penyedia menulis sesuatu yang bertentangan.
+    tipe = ""
 
     if catalog is not None and not catalog.kosong:
-        temuan, tipe_portal = _check_category(row, catalog)
+        temuan, tipe = _check_category(row, catalog)
         issues.extend(temuan)
-        tipe = tipe_portal or tipe
 
     for fld in fields:
         if fld.group.startswith(("Atribut", "Lampiran")):

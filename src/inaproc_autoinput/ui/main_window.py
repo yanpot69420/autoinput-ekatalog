@@ -301,6 +301,10 @@ class MainWindow(QMainWindow):
         rows = rows_from_records(records)
         for row in rows:
             row.issues = validate(row.data, catalog=self._catalog)
+            # Tipe produk ditentukan portal dari kategorinya, bukan diketik
+            # penyedia -- jadi diambil dari katalog, bukan dari kolom Excel.
+            node, _ = self._catalog.resolve_path(row.data.get("kategori", ""))
+            row.tipe_portal = node.tipe_produk if node else ""
 
         self._assets_panel.set_assets(Assets.load(path))
         restored = state.apply(path, rows)

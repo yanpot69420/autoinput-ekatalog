@@ -143,7 +143,6 @@ def _baris(berkas) -> dict:
         "kategori": "Bidang Bina Marga > Divisi 3 Pekerjaan Tanah dan Geosintetik > 3.1 Galian",
         "nama_produk": "Galian Biasa untuk Badan Jalan",
         "deskripsi": "Pekerjaan galian biasa sesuai spesifikasi.",
-        "foto_1": berkas["foto"],
         "kbki": "54310",
         "pdn_klasifikasi": "Lokal",
         "pdn_lokasi_produksi": "Diproduksi di seluruh Indonesia",
@@ -154,7 +153,6 @@ def _baris(berkas) -> dict:
         "harga_produk": "85000",
         "stok": "1000",
         "satuan_produk": "Meter",
-        "sni_aktif": "Ya",
         "atribut_1_nama": "Satuan Pengukuran",
         "atribut_1_nilai": "M3",
         "atribut_2_nama": "Kode Produk",
@@ -185,6 +183,7 @@ def test_isi_satu_baris_penuh(halaman, berkas):
           ppn: document.getElementById('react-select-ppnPercentage-select-input').value,
           sni: document.getElementById('form-product-sni-switch').checked,
           merek: document.getElementById('form-product-brand-isActive-switch').checked,
+          desimal: document.getElementById('form-product-decimal-qty-switch').checked,
           atribut: [...document.querySelectorAll('[name^="productInformations.mainInformations."]')].map(e => e.value),
           fotoAda: document.getElementById('product-image-input-0').files.length,
           dokumenAda: [...document.querySelectorAll('#document-field-input')].map(e => e.files.length),
@@ -198,13 +197,27 @@ def test_isi_satu_baris_penuh(halaman, berkas):
     assert nilai["stok"] == "1000"
     assert nilai["minBeli"] == "1"
     assert nilai["ppn"] == "12%"
-    assert nilai["sni"] is True
-    assert nilai["merek"] is False, "saklar tanpa nilai tidak boleh disentuh"
+    # Saklar Merek/SNI/TKDN tidak lagi punya kolom Excel: rincian yang muncul
+    # setelah dinyalakan belum didukung, jadi keduanya dibiarkan mati.
+    assert nilai["sni"] is False
+    assert nilai["merek"] is False
     assert nilai["fotoAda"] == 1
     # Atribut dicocokkan lewat nama, bukan urutan di Excel.
     assert nilai["atribut"][:2] == ["M3", "BNS-GAL-01"]
     # Dokumen 'Sertifikat Standar' ada di urutan kedua pada kategori ini.
     assert nilai["dokumenAda"] == [0, 1]
+    # Stok 1000 bulat -> kuantitas desimal tidak perlu dinyalakan.
+    assert nilai["desimal"] is False
+
+
+@pytestmark_browser
+def test_kuantitas_desimal_disimpulkan_dari_stok(halaman, berkas):
+    """Tidak ada kolomnya di Excel; nilainya disimpulkan dari angka stok."""
+    pengisi = ProductFormFiller(halaman)
+    pengisi.isi(dict(_baris(berkas), stok="332,35"), _assets(berkas))
+    assert halaman.evaluate(
+        "() => document.getElementById('form-product-decimal-qty-switch').checked"
+    ) is True
 
 
 @pytestmark_browser

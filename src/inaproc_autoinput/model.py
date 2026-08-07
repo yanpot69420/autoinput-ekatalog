@@ -62,9 +62,14 @@ class ProductRow:
         """Bagian paling spesifik dari jalur kategori, untuk ditampilkan di tabel."""
         return split_category(self.data.get("kategori", ""))[2]
 
+    # Diisi saat baris dibaca, dari katalog portal -- bukan dari kolom Excel.
+    # Portal yang menentukan tipe dari kategorinya, jadi penyedia tidak perlu
+    # menuliskannya dan tidak bisa menuliskannya keliru.
+    tipe_portal: str = ""
+
     @property
     def tipe_produk(self) -> str:
-        return self.data.get("tipe_produk", "")
+        return self.tipe_portal
 
     @property
     def atribut(self) -> dict[str, str]:

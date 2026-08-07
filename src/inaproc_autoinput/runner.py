@@ -24,6 +24,7 @@ from .assets import Assets
 from .schema import (
     TIPE_BARANG,
     attribute_pairs,
+    perlu_kuantitas_desimal,
     split_category,
 )
 
@@ -47,11 +48,10 @@ SEL_ATRIBUT_LAIN = 'input[name^="productInformations.additionalInformations."]'
 SEL_OPSI_TERLIHAT = '[role="option"]:visible, [class*="option"]:visible'
 
 SAKLAR = {
-    "merek_aktif": "#form-product-brand-isActive-switch",
-    "sni_aktif": "#form-product-sni-switch",
-    "kuantitas_desimal": "#form-product-decimal-qty-switch",
     "pre_order": "#form-product-preorder-isActive-switch",
 }
+# Saklar ini tidak punya kolom Excel: nilainya disimpulkan, bukan ditanyakan.
+SEL_KUANTITAS_DESIMAL = "#form-product-decimal-qty-switch"
 SAKLAR_NYALA = {"Ya", "Aktif"}
 
 TOMBOL_SIMPAN_DRAF = "Simpan Draf Produk"
@@ -286,7 +286,7 @@ class ProductFormFiller:
             berkas = foto[nomor - 1] if nomor <= len(foto) else ""
             self._unggah(SEL_FOTO.format(nomor - 1), _teks(berkas), f"Foto {nomor}")
         self._unggah(SEL_VIDEO, _teks(assets.video), "Video")
-        self._isi(SEL_VIDEO_URL, _teks(data.get("video_url")), "URL Video")
+        self._isi(SEL_VIDEO_URL, _teks(assets.video_url), "URL Video")
 
         self._pilih_dropdown(self._dropdown_dekat("Kode KBKI"),
                              _teks(data.get("kbki")), "Kode KBKI")
@@ -307,6 +307,9 @@ class ProductFormFiller:
             if nilai:
                 self._saklar(selector, nilai in SAKLAR_NYALA, kunci)
 
+        if perlu_kuantitas_desimal(data):
+            self._saklar(SEL_KUANTITAS_DESIMAL, True, "Kuantitas Desimal")
+
         self._isi(SEL_MIN_BELI, _angka(data.get("minimum_pembelian")),
                   "Minimum Pembelian")
         self._isi(SEL_HARGA, _angka(data.get("harga_produk")), "Harga Produk")
@@ -314,7 +317,7 @@ class ProductFormFiller:
         self._pilih_dropdown(self._dropdown_dekat("Satuan Produk"),
                              _teks(data.get("satuan_produk")), "Satuan Produk")
 
-        if (tipe or _teks(data.get("tipe_produk"))) == TIPE_BARANG:
+        if tipe == TIPE_BARANG:
             self._isi_pengiriman(data)
 
         self.isi_atribut(attribute_pairs(data))

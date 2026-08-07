@@ -82,6 +82,7 @@ class Assets:
     foto_umum: list[str] = field(default_factory=list)
     foto_baris: dict[int, list[str]] = field(default_factory=dict)
     video: str = ""
+    video_url: str = ""
 
     # --- penggunaan ---------------------------------------------------------
 
@@ -111,7 +112,8 @@ class Assets:
 
     @property
     def kosong(self) -> bool:
-        return not (self.dokumen or self.foto_umum or self.foto_baris or self.video)
+        return not (self.dokumen or self.foto_umum or self.foto_baris
+                    or self.video or self.video_url)
 
     # --- pemeriksaan --------------------------------------------------------
 
@@ -131,6 +133,9 @@ class Assets:
             galat = periksa(self.video, VIDEO_EXT, BATAS_VIDEO_MB)
             if galat:
                 pesan.append(f"Video: {galat}")
+
+        if self.video_url and not self.video_url.lower().startswith(("http://", "https://")):
+            pesan.append("URL Video: harus diawali http:// atau https://")
 
         if not self.dokumen:
             pesan.append(
@@ -155,6 +160,7 @@ class Assets:
             "foto_umum": self.foto_umum,
             "foto_baris": {str(k): v for k, v in self.foto_baris.items()},
             "video": self.video,
+            "video_url": self.video_url,
         }
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), "utf-8")
         return path
@@ -180,6 +186,7 @@ class Assets:
             foto_umum=list(payload.get("foto_umum") or []),
             foto_baris=baris,
             video=payload.get("video", "") or "",
+            video_url=payload.get("video_url", "") or "",
         )
 
 

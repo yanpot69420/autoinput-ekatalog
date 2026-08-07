@@ -76,8 +76,6 @@ class Field:
 
 G_KATEGORI = "Kategori"
 G_PRODUK = "Informasi Produk"
-G_MEDIA = "Foto & Video"
-G_SERTIFIKAT = "Merek, SNI & TKDN"
 G_PDN = "KBKI & PDN"
 G_PAJAK = "Pajak"
 G_HARGA = "Harga & Stok"
@@ -89,8 +87,6 @@ CORE_FIELDS: tuple[Field, ...] = (
     Field("kategori", "Kategori", G_KATEGORI, required=True,
           hint="Salin dari sheet 'Daftar Kategori'. Format: Level 1 > Level 2 > Level 3",
           width=64),
-    Field("tipe_produk", "Tipe Produk", G_KATEGORI, options=TIPE_PRODUK,
-          hint="Opsional — portal menentukannya dari kategori", width=14),
 
     # --- Informasi produk
     Field("produk_sektoral", "Daftar Produk Sektoral", G_PRODUK,
@@ -98,25 +94,6 @@ CORE_FIELDS: tuple[Field, ...] = (
     Field("nama_produk", "Nama Produk", G_PRODUK, required=True,
           min_len=5, max_len=250, width=44),
     Field("deskripsi", "Deskripsi", G_PRODUK, max_len=2000, width=44),
-
-    # Foto, video, dan dokumen PDF tidak lagi jadi kolom Excel -- semuanya
-    # dipilih lewat panel Berkas di aplikasi. Alasannya: mengetik path berkas
-    # di spreadsheet itu rawan salah, tidak bisa diperiksa saat mengetik, dan
-    # dokumen perusahaan seperti SBU sama untuk seluruh baris sehingga
-    # menuliskannya 51 kali cuma pengulangan. Yang tersisa di sini hanya URL
-    # video, karena itu memang teks, bukan berkas.
-    Field("video_url", "URL Video Produk", G_MEDIA, url=True,
-          hint="Tautan YouTube", width=32),
-
-    # --- Merek, SNI, TKDN: saklar. Field turunannya muncul saat dinyalakan dan
-    # belum dipetakan, jadi belum ada kolomnya.
-    Field("merek_aktif", "Punya Merek", G_SERTIFIKAT, options=ref.YA_TIDAK,
-          hint="Rincian merek belum didukung", width=16),
-    Field("sni_aktif", "Punya Sertifikat SNI", G_SERTIFIKAT, options=ref.YA_TIDAK,
-          hint="Rincian SNI belum didukung", width=18),
-    Field("tkdn_aktif", "Punya Sertifikat TKDN", G_SERTIFIKAT, options=ref.YA_TIDAK,
-          only_for=(TIPE_BARANG,),
-          hint="Hanya untuk produk Barang; rincian belum didukung", width=20),
 
     # --- KBKI & PDN
     Field("kbki", "Kode KBKI", G_PDN, required=True,
@@ -132,20 +109,12 @@ CORE_FIELDS: tuple[Field, ...] = (
 
     # --- Pajak
     Field("ppn", "PPN", G_PAJAK, required=True, options=ref.PPN, width=12),
-    Field("ppnbm_aktif", "Aktifkan PPnBM", G_PAJAK, options=ref.AKTIF,
-          only_for=(TIPE_BARANG,),
-          hint="Hanya untuk produk Barang", width=18),
-    Field("kuantitas_desimal", "Kuantitas Desimal", G_PAJAK, options=ref.AKTIF,
-          hint="Hanya muncul di sebagian kategori", width=18),
 
     # --- Harga & stok
     Field("minimum_pembelian", "Minimum Pembelian", G_HARGA, numeric=True,
           hint="Kosong berarti 1", width=18),
     Field("harga_produk", "Harga Produk", G_HARGA, required=True, numeric=True,
           hint="Angka polos, di luar pajak & ongkir, tidak boleh 0", width=18),
-    Field("harga_zonasi", "Harga Zonasi", G_HARGA, options=ref.AKTIF,
-          hint="Hanya muncul di sebagian kategori; rincian belum didukung",
-          width=16),
     Field("stok", "Jumlah Stok", G_HARGA, required=True, numeric=True, width=14),
     Field("satuan_produk", "Satuan Produk", G_HARGA, required=True,
           options=ref.SATUAN_PRODUK, lookup="Satuan Produk", width=18),
@@ -163,10 +132,25 @@ CORE_FIELDS: tuple[Field, ...] = (
           only_for=(TIPE_BARANG,), width=14),
     Field("tinggi_cm", "Tinggi (cm)", G_KIRIM, numeric=True,
           only_for=(TIPE_BARANG,), width=14),
-    Field("ongkir", "Atur Ongkir Produk", G_KIRIM, options=ref.OPSI_ONGKIR,
-          only_for=(TIPE_BARANG,),
-          hint="Kosong berarti mengikuti Pengaturan Pengiriman toko", width=20),
 )
+
+
+def perlu_kuantitas_desimal(row: dict) -> bool:
+    """Apakah saklar Kuantitas Desimal perlu dinyalakan untuk baris ini.
+
+    Disimpulkan, bukan ditanyakan: stok 332,35 jelas butuh desimal, stok 1
+    tidak. Menanyakannya lewat kolom cuma menambah satu hal yang bisa salah
+    tanpa menambah keputusan.
+    """
+    for kunci in ("stok", "minimum_pembelian"):
+        teks = str(row.get(kunci, "") or "").strip().replace(",", ".")
+        if "." in teks:
+            try:
+                if float(teks) != int(float(teks)):
+                    return True
+            except ValueError:
+                continue
+    return False
 
 
 def attribute_fields(slots: int = JUMLAH_SLOT_ATRIBUT) -> tuple[Field, ...]:
@@ -238,6 +222,7 @@ __all__ = [
     "TIPE_PRODUK",
     "VIDEO_EXT",
     "all_fields",
+    "perlu_kuantitas_desimal",
     "attribute_fields",
     "attribute_pairs",
     "by_key",

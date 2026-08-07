@@ -146,11 +146,23 @@ Skemanya disusun dari pembacaan langsung form `penyedia.inaproc.id/products/add`
 — lihat [docs/form-tambah-produk.md](docs/form-tambah-produk.md). Ini berbeda
 cukup jauh dari template unggah massal, jadi jangan pakai yang itu sebagai acuan.
 
-**29 kolom inti** — kategori (satu kolom jalur lengkap), Daftar Produk
-Sektoral, nama, deskripsi, URL video, saklar Merek/SNI/TKDN, KBKI,
-self-declare PDN, PPN, PPnBM, kuantitas desimal, harga, stok, pre-order, serta
-bagian Pengiriman (berat, dimensi, ongkir) yang hanya berlaku untuk kategori
-bertipe Barang.
+**20 kolom inti** — kategori (satu kolom jalur lengkap), Daftar Produk
+Sektoral, nama, deskripsi, KBKI, self-declare PDN, PPN, minimum pembelian,
+harga, stok, satuan, pre-order, serta berat dan dimensi yang hanya berlaku
+untuk kategori bertipe Barang.
+
+### Yang sengaja tidak jadi kolom
+
+Sembilan kolom dibuang setelah diuji terhadap file 51 pekerjaan nyata, di mana
+21 dari 45 kolom sama sekali tidak terisi:
+
+| Kolom | Kenapa dibuang |
+|---|---|
+| Punya Merek, Punya SNI, Punya TKDN, Harga Zonasi, Aktifkan PPnBM | Menyalakannya memunculkan isian lain di form yang belum didukung, jadi form justru jadi tidak lengkap. Saklar yang jawabannya cuma boleh "Tidak" bukan pilihan |
+| Atur Ongkir Produk | Pilihannya cuma satu, `Standar`. Tidak ada keputusan di sini |
+| Tipe Produk | Portal menentukannya dari kategori; menyalinnya ke Excel cuma membuka peluang bertentangan |
+| Kuantitas Desimal | Disimpulkan dari angka stok: 332,35 butuh desimal, 1 tidak |
+| URL Video Produk | Pindah ke tab Berkas, berdampingan dengan berkas videonya |
 
 **8 pasang `Atribut n` / `Nilai n`** — untuk bagian *Spesifikasi Produk →
 Informasi Utama*, yang isinya berbeda tiap Kategori Level 3. Di form bentuknya

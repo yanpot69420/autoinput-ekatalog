@@ -19,13 +19,18 @@ def test_template_punya_semua_kolom(tmp_path):
         str(ws.cell(ROW_LABEL, i).value or "").strip()
         for i in range(1, ws.max_column + 1)
     ]
-    assert labels[:2] == ["Kategori", "Tipe Produk"]
+    assert labels[0] == "Kategori"
     assert len(labels) == len(all_fields())
     assert "Nama Produk" in labels
     assert "Atribut 1" in labels and "Nilai 1" in labels
     # Berkas dipilih di aplikasi, bukan diketik di Excel.
     assert not [l for l in labels if l.startswith(("Foto", "Dokumen", "Berkas"))]
-    assert "Video Produk" not in labels
+    # Sembilan kolom dibuang: saklar tanpa detail, pilihan tunggal, dan yang
+    # nilainya bisa disimpulkan sendiri oleh aplikasi.
+    for dibuang in ("Tipe Produk", "Punya Merek", "Punya Sertifikat SNI",
+                    "Punya Sertifikat TKDN", "Aktifkan PPnBM", "Harga Zonasi",
+                    "Atur Ongkir Produk", "Kuantitas Desimal", "URL Video Produk"):
+        assert dibuang not in labels
     assert "Berat Produk (gram)" in labels  # khusus kategori Barang
 
 
@@ -37,7 +42,7 @@ def test_template_menandai_kolom_wajib(tmp_path):
         for i in range(1, ws.max_column + 1)
     }
     assert keterangan["Nama Produk"] == "(Wajib)"
-    assert keterangan["Tipe Produk"] == "(Opsional)"  # portal menentukannya sendiri
+    assert keterangan["Jumlah Stok"] == "(Wajib)"
 
 
 def test_kolom_berpilihan_punya_dropdown(tmp_path):

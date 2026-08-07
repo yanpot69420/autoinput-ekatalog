@@ -121,7 +121,6 @@ def test_cache_hilang_tidak_bikin_error(tmp_path):
 
 BARIS = {
     "kategori": "Bidang Bina Marga > Divisi 3 Pekerjaan Tanah dan Geosintetik > 3.1 Galian",
-    "tipe_produk": "Jasa",
 }
 
 
@@ -141,9 +140,14 @@ def test_kategori_salah_ketik_ditolak(catalog):
     assert issues and "Kategori Level 3" in issues[0].message
 
 
-def test_tipe_produk_tidak_cocok_kategori_ditolak(catalog):
-    issues = _kategori_issues(dict(BARIS, tipe_produk="Barang"), catalog)
-    assert issues and "terdaftar sebagai Jasa" in issues[0].message
+def test_tipe_produk_diambil_dari_katalog(catalog):
+    """Tidak ada kolom Tipe Produk; portal yang menentukannya dari kategori."""
+    from inaproc_autoinput.validation import _check_category
+
+    _, tipe = _check_category(BARIS, catalog)
+    assert tipe == "Jasa"
+    _, tipe = _check_category({"kategori": BARANG}, catalog)
+    assert tipe == "Barang"
 
 
 def test_resolve_path_dari_satu_kolom(catalog):

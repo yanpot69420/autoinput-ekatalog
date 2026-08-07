@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -118,13 +119,23 @@ class AssetsPanel(QWidget):
         bar.addWidget(self._btn_hapus_baris)
         self._layout.addLayout(bar)
 
-        self._layout.addWidget(self._judul("Video produk", "Opsional. .mp4 atau .mov."))
+        self._layout.addWidget(self._judul(
+            "Video produk", "Opsional. Berkas .mp4/.mov, atau tautan YouTube."
+        ))
         self._video_label = QLabel()
         self._video_label.setStyleSheet(_ABU)
         self._layout.addLayout(self._baris_tombol(
             "Video", self._video_label,
             [("Pilih…", self._pilih_video), ("Hapus", self._hapus_video)],
         ))
+
+        self._url = QLineEdit()
+        self._url.setPlaceholderText("https://www.youtube.com/watch?v=…")
+        self._url.editingFinished.connect(self._simpan_url)
+        bar_url = QHBoxLayout()
+        bar_url.addWidget(QLabel("URL Video"))
+        bar_url.addWidget(self._url, stretch=1)
+        self._layout.addLayout(bar_url)
 
         self._status = QLabel()
         self._status.setWordWrap(True)
@@ -221,6 +232,12 @@ class AssetsPanel(QWidget):
         self._assets.video = ""
         self._selesai()
 
+    def _simpan_url(self) -> None:
+        teks = self._url.text().strip()
+        if teks != self._assets.video_url:
+            self._assets.video_url = teks
+            self._selesai()
+
     def _selesai(self) -> None:
         self.refresh()
         self.changed.emit()
@@ -265,6 +282,9 @@ class AssetsPanel(QWidget):
         self._video_label.setStyleSheet(
             _MERAH if galat_video else (_HIJAU if self._assets.video else _ABU)
         )
+
+        if self._url.text().strip() != self._assets.video_url:
+            self._url.setText(self._assets.video_url)
 
         masalah = self._assets.masalah(self._baris)
         if masalah:
