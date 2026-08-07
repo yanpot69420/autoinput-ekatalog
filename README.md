@@ -201,6 +201,23 @@ alamatnya ke jendela yang sudah ada lalu keluar diam-diam.
 Dengan profil harian aplikasi tidak pernah mengambil alih tab yang sedang
 terbuka: kalau belum ada tab portal, tab baru yang dibuka.
 
+### Mengukur, bukan menebak
+
+Kalau portal terasa berat, jalankan ini **tepat saat itu**:
+
+```bash
+.venv/bin/python -m inaproc_autoinput.periksa_portal
+```
+
+Keluarannya angka, bukan kesan: berapa lama server menjawab, berapa lama form
+siap dipakai, dan permintaan mana yang menahan. Saat portal sehat, form siap
+sekitar **0,7 detik**. Halaman yang sedang kamu buka tidak diganggu —
+pengukuran memakai tab tersendiri yang ditutup lagi.
+
+Bedanya penting. Portal yang lambat tidak bisa dipercepat dari aplikasi.
+Halaman yang tidak pernah siap padahal servernya cepat menunjuk ke hal lain
+sama sekali: sesi yang mati, atau modal yang menutupi halaman.
+
 ### Kalau portal terasa berhenti merespons
 
 Dua sebab yang sudah pernah terjadi, dan keduanya tidak terlihat seperti apa

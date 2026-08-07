@@ -200,7 +200,8 @@ def mulai_ulang(port: int = PORT_DEFAULT, url: str = URL_AWAL,
 
 
 def launch(port: int = PORT_DEFAULT, url: str = URL_AWAL,
-           dir_profil: Path | None = None) -> tuple[bool, str]:
+           dir_profil: Path | None = None,
+           tunggu_siap: float = 20.0) -> tuple[bool, str]:
     """Buka Chrome berport debug. Mengembalikan (berhasil, pesan).
 
     Bila port sudah hidup, tidak membuka jendela baru -- cukup melaporkannya.
@@ -262,9 +263,30 @@ def launch(port: int = PORT_DEFAULT, url: str = URL_AWAL,
     except OSError as error:
         return False, f"Gagal menjalankan Chrome: {error}"
 
-    return True, (
-        "Chrome dibuka dengan profil terpisah. Login ke portal di jendela itu, "
-        "lalu klik 'Uji koneksi'."
+    # Prosesnya jalan bukan berarti port debugnya hidup. Chrome yang menemukan
+    # profilnya sudah dipakai instance lain cuma menyerahkan alamat ke jendela
+    # itu lalu keluar -- tanpa galat, tanpa port. Tanpa pemeriksaan ini tombolnya
+    # melapor "Chrome dibuka" untuk sesuatu yang tidak pernah terjadi, dan yang
+    # muncul justru tab baru di Chrome harian: browser yang sama sekali tidak
+    # bisa dikendalikan aplikasi, lengkap dengan seluruh ekstensi dan tabnya.
+    batas = time.monotonic() + tunggu_siap
+    while time.monotonic() < batas:
+        if is_listening(port, timeout=0.5):
+            return True, (
+                f"Chrome dibuka dengan profil:\n  {dasar}\n\n"
+                "Login ke portal di jendela itu, lalu klik 'Uji koneksi'."
+            )
+        time.sleep(0.4)
+
+    return False, (
+        "Chrome dijalankan, tapi port debugnya tidak pernah hidup.\n\n"
+        "Ini terjadi bila profil berikut sudah dipakai jendela Chrome lain:\n"
+        f"  {dasar}\n\n"
+        "Chrome yang kedua tidak membuka port apa pun — alamatnya cuma "
+        "diserahkan ke jendela yang sudah ada, jadi yang terbuka adalah "
+        "Chrome biasamu yang tidak bisa dikendalikan aplikasi.\n\n"
+        "Tutup semua jendela Chrome lalu Keluar dari menu Chrome, atau pilih "
+        "'Profil terpisah' supaya Chrome harianmu tidak perlu ditutup."
     )
 
 

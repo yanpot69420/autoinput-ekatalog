@@ -21,6 +21,29 @@ def pilihan_terisolasi(tmp_path, monkeypatch):
     monkeypatch.setattr(chrome, "PILIHAN_PATH", tmp_path / "pilihan.json")
 
 
+def _chrome_palsu(monkeypatch) -> dict:
+    """Chrome tiruan: port mati sebelum dijalankan, hidup begitu prosesnya jalan.
+
+    launch() menunggu port debugnya benar-benar menjawab sebelum melapor
+    berhasil. Tiruan yang portnya mati selamanya bukan tiruan Chrome yang
+    berhasil -- itu tiruan Chrome yang gagal, dan ujinya jadi menguji hal lain.
+    """
+    catat: dict = {}
+
+    def popen(argumen, **kw):
+        catat["argumen"] = argumen
+        catat["kw"] = kw
+        catat["hidup"] = True
+        return None
+
+    monkeypatch.setattr(
+        chrome, "is_listening",
+        lambda *a, **k: "Chrome/151" if catat.get("hidup") else "")
+    monkeypatch.setattr(chrome, "find_chrome", lambda: Path("/bin/echo"))
+    monkeypatch.setattr(chrome.subprocess, "Popen", popen)
+    return catat
+
+
 def test_perintah_memuat_port_dan_profil_terpisah():
     argumen = chrome.command()
     assert f"--remote-debugging-port={chrome.PORT_DEFAULT}" in argumen
@@ -48,15 +71,7 @@ def test_launch_selalu_membuka_alamat(monkeypatch, tmp_path):
     Halaman tab baru tidak muncul di /json/list, jadi port debug hidup tapi
     kosong -- dan galatnya menyesatkan. Karena itu URL tidak boleh dilewatkan.
     """
-    dijalankan = {}
-
-    def palsu(argumen, **_):
-        dijalankan["argumen"] = argumen
-        return None
-
-    monkeypatch.setattr(chrome, "is_listening", lambda *a, **k: "")
-    monkeypatch.setattr(chrome, "find_chrome", lambda: Path("/bin/echo"))
-    monkeypatch.setattr(chrome.subprocess, "Popen", palsu)
+    dijalankan = _chrome_palsu(monkeypatch)
 
     # Profil sendiri: profil nyata di home bisa sedang terkunci Chrome yang
     # betulan berjalan, dan uji ini tidak sedang menguji itu.
@@ -77,6 +92,24 @@ def test_launch_tidak_membuka_jendela_kedua(monkeypatch):
     monkeypatch.setattr(chrome.subprocess, "Popen", jangan_dipanggil)
     berhasil, pesan = chrome.launch()
     assert berhasil and "sudah terbuka" in pesan
+
+
+def test_launch_gagal_bila_port_tak_pernah_hidup(monkeypatch, tmp_path):
+    """Prosesnya jalan bukan berarti port debugnya hidup.
+
+    Chrome yang menemukan profilnya sudah dipakai jendela lain cuma menyerahkan
+    alamatnya lalu keluar -- tanpa galat, tanpa port. Dulu itu dilaporkan
+    "Chrome dibuka", padahal yang terbuka justru tab di Chrome harian yang sama
+    sekali tidak bisa dikendalikan aplikasi.
+    """
+    monkeypatch.setattr(chrome, "is_listening", lambda *a, **k: "")
+    monkeypatch.setattr(chrome, "find_chrome", lambda: Path("/bin/echo"))
+    monkeypatch.setattr(chrome.subprocess, "Popen", lambda *a, **k: None)
+
+    berhasil, pesan = chrome.launch(dir_profil=tmp_path, tunggu_siap=0.5)
+    assert not berhasil
+    assert "tidak pernah hidup" in pesan
+    assert "Profil terpisah" in pesan
 
 
 def test_launch_melapor_bila_chrome_tidak_ada(monkeypatch):
@@ -101,23 +134,15 @@ def test_proses_chrome_dilepas_sesuai_sistem(monkeypatch, tmp_path):
     for platform, kunci in (("darwin", "start_new_session"),
                             ("linux", "start_new_session"),
                             ("win32", "creationflags")):
-        dipakai = {}
-
-        def palsu(argumen, **kw):
-            dipakai.update(kw)
-            return None
-
         monkeypatch.setattr(chrome.sys, "platform", platform)
-        monkeypatch.setattr(chrome, "is_listening", lambda *a, **k: "")
-        monkeypatch.setattr(chrome, "find_chrome", lambda: Path("/bin/echo"))
-        monkeypatch.setattr(chrome.subprocess, "Popen", palsu)
+        dijalankan = _chrome_palsu(monkeypatch)
 
         berhasil, _ = chrome.launch(dir_profil=tmp_path)
         assert berhasil, platform
-        assert kunci in dipakai, f"{platform} tidak memakai {kunci}"
+        assert kunci in dijalankan["kw"], f"{platform} tidak memakai {kunci}"
 
     # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    assert dipakai["creationflags"] == 0x8 | 0x200
+    assert dijalankan["kw"]["creationflags"] == 0x8 | 0x200
 
 
 # --- menutup dan menjalankan ulang ------------------------------------------
