@@ -393,7 +393,11 @@ class ProductFormFiller:
         if tipe == TIPE_BARANG:
             self._isi_pengiriman(data)
 
-        self.isi_atribut(attribute_pairs(data))
+        atribut = attribute_pairs(data)
+        for nama, nilai in list(atribut.items()):
+            if not nilai:
+                atribut[nama] = assets.nilai_atribut(nama)
+        self.isi_atribut({n: v for n, v in atribut.items() if v})
         self.isi_lampiran(dict(assets.dokumen))
 
     def _isi_pengiriman(self, data: dict) -> None:

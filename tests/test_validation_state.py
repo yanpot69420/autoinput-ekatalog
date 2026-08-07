@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from inaproc_autoinput import state
+from inaproc_autoinput.assets import Assets
 from inaproc_autoinput.model import ProductRow, Status, rows_from_records
 from inaproc_autoinput.validation import validate
 
@@ -150,6 +151,30 @@ def test_pre_order_hari_wajib_saat_aktif(lengkap):
 def test_atribut_bernama_tanpa_nilai_ditolak(lengkap):
     row = dict(lengkap, atribut_2_nama="Kode Produk", atribut_2_nilai="")
     assert any("Kode Produk" in i.label for i in _errors(row))
+
+
+def test_nilai_kosong_diambil_dari_dokumen_bernama_sama(lengkap, tmp_path):
+    """Atribut yang berpasangan dengan lampiran tidak perlu diketik di Excel."""
+    berkas = tmp_path / "SBU SDA.pdf"
+    berkas.write_bytes(b"%PDF-")
+    assets = Assets()
+    assets.set_dokumen("Komponen Struktur Biaya Tayang", str(berkas))
+
+    row = dict(lengkap, atribut_2_nama="Komponen Struktur Biaya Tayang",
+               atribut_2_nilai="")
+    assert not [i for i in validate(row, assets=assets) if i.blocking]
+
+    catatan = [i for i in validate(row, assets=assets) if not i.blocking
+               and "Komponen" in i.label]
+    assert catatan and "SBU SDA" in catatan[0].message
+
+
+def test_atribut_tanpa_dokumen_padanan_tetap_memblokir(lengkap):
+    """Hanya atribut yang punya dokumen bernama sama yang boleh kosong."""
+    row = dict(lengkap, atribut_2_nama="Lingkup Kegiatan", atribut_2_nilai="")
+    assert any("Lingkup Kegiatan" in i.label for i in _errors(row))
+    assert any("Lingkup Kegiatan" in i.label
+               for i in validate(row, assets=Assets()) if i.blocking)
 
 
 def test_nilai_tanpa_nama_atribut_ditolak(lengkap):

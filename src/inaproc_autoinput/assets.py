@@ -104,6 +104,18 @@ class Assets:
         foto = self.foto_untuk(excel_row)
         return bool(foto) and adalah_placeholder(foto[0])
 
+    def nilai_atribut(self, nama: str) -> str:
+        """Nilai atribut yang bisa diambil dari dokumen bernama sama.
+
+        Beberapa atribut di form berpasangan dengan lampiran berjudul persis
+        sama -- "Masa Berlaku SBU Konstruksi" dan "Komponen Struktur Biaya
+        Tayang" punya kolom teks sekaligus unggahan PDF. Kalau dokumennya sudah
+        dipilih, nama berkasnya dipakai sebagai isi kolom teksnya, jadi tidak
+        perlu diketik ulang di Excel.
+        """
+        berkas = self.dokumen.get(str(nama or "").strip())
+        return Path(berkas).stem if berkas else ""
+
     def baris_berfoto_sendiri(self) -> list[int]:
         return sorted(self.foto_baris)
 

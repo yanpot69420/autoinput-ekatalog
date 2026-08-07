@@ -311,14 +311,17 @@ class MainWindow(QMainWindow):
             )
 
         rows = rows_from_records(records)
+        # Berkas dimuat lebih dulu: sebagian atribut diisi dari dokumen yang
+        # dipilih, jadi memeriksa baris sebelum tahu berkasnya akan mengeluh
+        # soal nilai yang sebenarnya sudah ada sumbernya.
+        self._assets_panel.set_assets(Assets.load(path))
         for row in rows:
-            row.issues = validate(row.data, catalog=self._catalog)
             # Tipe produk ditentukan portal dari kategorinya, bukan diketik
             # penyedia -- jadi diambil dari katalog, bukan dari kolom Excel.
             node, _ = self._catalog.resolve_path(row.data.get("kategori", ""))
             row.tipe_portal = node.tipe_produk if node else ""
+        self._periksa_ulang(rows)
 
-        self._assets_panel.set_assets(Assets.load(path))
         restored = state.apply(path, rows)
 
         self._workbook_path = path
@@ -580,10 +583,26 @@ class MainWindow(QMainWindow):
             self._assets_panel.set_baris(row.excel_row, row.nama)
         self._perbarui_tombol()
 
+    def _periksa_ulang(self, rows=None) -> None:
+        """Periksa ulang seluruh baris dengan berkas yang berlaku sekarang."""
+        assets = self._assets_panel.assets()
+        for row in rows if rows is not None else self._model.rows():
+            row.issues = validate(row.data, catalog=self._catalog, assets=assets)
+
     def _on_assets_changed(self) -> None:
-        """Simpan pilihan berkas di sebelah workbook, lalu perbarui ringkasan."""
+        """Simpan pilihan berkas di sebelah workbook, lalu perbarui ringkasan.
+
+        Memilih dokumen bisa membuat baris yang tadinya terhalang jadi siap --
+        atribut seperti Komponen Struktur Biaya Tayang mengambil nilainya dari
+        nama berkas. Karena itu barisnya diperiksa ulang, bukan cuma ringkasan
+        yang disegarkan.
+        """
         if self._workbook_path:
             self._assets_panel.assets().save(self._workbook_path)
+        self._periksa_ulang()
+        for posisi in range(len(self._model.rows())):
+            self._model.refresh(posisi)
+        self._perbarui_tombol()
         self._update_summary()
 
     def _describe(self, row) -> str:

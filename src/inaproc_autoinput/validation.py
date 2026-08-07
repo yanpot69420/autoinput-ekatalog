@@ -142,11 +142,23 @@ def _check_category(row: dict, catalog) -> tuple[list[Issue], str]:
     return issues, node.tipe_produk
 
 
-def _check_pairs(row: dict) -> list[Issue]:
-    """Blok atribut: slot harus terisi lengkap atau kosong sama sekali."""
+def _check_pairs(row: dict, assets=None) -> list[Issue]:
+    """Blok atribut: slot harus terisi lengkap atau kosong sama sekali.
+
+    Kecuali bila nilainya bisa diambil dari dokumen bernama sama yang sudah
+    dipilih di panel Berkas -- itu bukan kekurangan, cuma pengisian dari sumber
+    lain.
+    """
     issues: list[Issue] = []
     for _, nama, nilai in incomplete_pairs(row):
         if nama:
+            dari_berkas = assets.nilai_atribut(nama) if assets is not None else ""
+            if dari_berkas:
+                issues.append(Issue(
+                    nama, f"Atribut '{nama}'",
+                    f"diisi dari dokumen: {dari_berkas}", blocking=False,
+                ))
+                continue
             issues.append(Issue(nama, f"Atribut '{nama}'", "nilainya belum diisi"))
         else:
             issues.append(Issue(
@@ -156,7 +168,7 @@ def _check_pairs(row: dict) -> list[Issue]:
 
 
 def validate(
-    row: dict, fields: tuple[Field, ...] | None = None, catalog=None
+    row: dict, fields: tuple[Field, ...] | None = None, catalog=None, assets=None
 ) -> list[Issue]:
     fields = fields or all_fields()
     issues: list[Issue] = []
@@ -174,7 +186,7 @@ def validate(
             continue  # blok berpasangan diperiksa terpisah
         issues.extend(_check_field(fld, row, tipe))
 
-    issues.extend(_check_pairs(row))
+    issues.extend(_check_pairs(row, assets))
 
     if _blank(row.get("kbki")):
         # Portal tetap mewajibkannya. Kalau dilewati diam-diam, produk baru

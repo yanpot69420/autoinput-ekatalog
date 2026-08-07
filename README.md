@@ -252,6 +252,12 @@ Termasuk di sini: Satuan Pengukuran, Kode Produk, Lingkup Kegiatan, Lokasi
 Layanan (Kecamatan), SBU Konstruksi. Semuanya milik kategori, bukan milik semua
 produk — karena itu tidak jadi kolom inti.
 
+Sebagian atribut berpasangan dengan lampiran berjudul persis sama — *Masa
+Berlaku SBU Konstruksi* dan *Komponen Struktur Biaya Tayang* punya kolom teks
+sekaligus unggahan PDF. Untuk keduanya kolom `Nilai n` boleh dikosongkan:
+aplikasi mengisinya dengan nama berkas yang kamu pilih di tab **Berkas**, jadi
+tidak perlu diketik ulang di Excel. Yang lain tetap harus diisi.
+
 ### Berkas tidak ada di Excel
 
 Foto, video, dan dokumen PDF dipilih lewat tab **Berkas** di aplikasi, bukan
