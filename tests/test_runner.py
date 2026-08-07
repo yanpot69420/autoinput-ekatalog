@@ -149,9 +149,12 @@ def runner():
 
 @pytest.fixture
 def halaman(runner, server):
-    runner.page.goto(server)
-    runner.page.wait_for_selector('input[placeholder="Pilih Kategori"]')
-    return runner.page
+    # Lewat siapkan_halaman: menyambung sengaja tidak lagi membuka tab, jadi
+    # runner.page bisa saja belum ada.
+    page = runner.siapkan_halaman()
+    page.goto(server)
+    page.wait_for_selector('input[placeholder="Pilih Kategori"]')
+    return page
 
 
 @pytest.fixture(scope="module")
@@ -504,3 +507,85 @@ def test_jalankan_melaporkan_dibatalkan_bukan_gagal(runner, halaman, berkas,
     assert "dihentikan" in hasil.pesan
     assert hasil.langkah, "langkah yang sempat jalan tetap dilaporkan"
     assert halaman.locator("#hasil").inner_text() == ""
+
+
+# --- tab tidak boleh menumpuk ------------------------------------------------
+
+
+class _HalamanPalsu:
+    def __init__(self, url: str):
+        self.url = url
+        self._tutup = False
+
+    def is_closed(self) -> bool:
+        return self._tutup
+
+
+class _KonteksPalsu:
+    def __init__(self, *url: str):
+        self.pages = [_HalamanPalsu(u) for u in url]
+        self.dibuat = 0
+
+    def new_page(self):
+        self.dibuat += 1
+        halaman = _HalamanPalsu("about:blank")
+        self.pages.append(halaman)
+        return halaman
+
+
+def _runner(*url: str) -> BrowserRunner:
+    r = BrowserRunner()
+    r._konteks = _KonteksPalsu(*url)
+    return r
+
+
+def test_menyambung_tidak_membuka_tab_sama_sekali():
+    """"Uji koneksi" ditekan berkali-kali; tabnya tidak boleh beranak."""
+    r = _runner("https://mail.google.com/", "https://github.com/")
+    for _ in range(5):
+        r.page = r._halaman_terpakai()
+    assert r._konteks.dibuat == 0
+    assert r.page is None            # tab orang lain tidak pernah diambil alih
+
+
+def test_tab_kosong_dipakai_ulang_bukan_ditambah():
+    """Tab baru berisi about:blank.
+
+    Kalau hanya tab ber-URL portal yang dianggap layak, tab yang baru saja
+    dibuat tidak dikenali pada pemanggilan berikutnya -- lalu dibuat lagi, dan
+    lagi. Itu persis yang membuat tab menumpuk tiap kali "Uji koneksi" ditekan.
+    """
+    r = _runner("https://mail.google.com/")
+    pertama = r.siapkan_halaman()
+    assert r._konteks.dibuat == 1
+
+    for _ in range(4):
+        r.page = None                # seperti menyambung ulang dari awal
+        assert r.siapkan_halaman() is pertama
+    assert r._konteks.dibuat == 1
+
+
+def test_tab_portal_lebih_diutamakan_daripada_tab_kosong():
+    r = _runner("about:blank", "https://penyedia.inaproc.id/products/add")
+    assert "penyedia.inaproc.id" in r.siapkan_halaman().url
+    assert r._konteks.dibuat == 0
+
+
+def test_tab_yang_tertutup_diganti_bukan_dipakai():
+    r = _runner("https://penyedia.inaproc.id/products/add")
+    halaman = r.siapkan_halaman()
+    halaman._tutup = True
+    r._konteks.pages.remove(halaman)
+
+    pengganti = r.siapkan_halaman()
+    assert pengganti is not halaman
+    assert r._konteks.dibuat == 1
+
+
+def test_siap_tanpa_tab_tetap_benar_selama_tersambung():
+    """Belum ada tab bukan berarti belum tersambung."""
+    r = _runner("https://mail.google.com/")
+    assert r.page is None and r.siap()
+
+    kosong = BrowserRunner()
+    assert not kosong.siap()

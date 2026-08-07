@@ -75,8 +75,16 @@ class RunWorker(QThread):
                 if halangan:
                     self.koneksi.emit(Hasil(False, pesan_penghalang(halangan)))
                     return
-                alamat = runner.page.url if runner.page else "(tanpa halaman)"
-                self.koneksi.emit(Hasil(True, f"Tersambung. Tab aktif: {alamat}"))
+                # Menguji koneksi tidak membuka tab. Belum adanya tab portal
+                # bukan masalah -- tabnya dibuat nanti, saat ada baris yang
+                # benar-benar dikerjakan.
+                if runner.page is None:
+                    self.koneksi.emit(Hasil(
+                        True, "Tersambung. Belum ada tab portal terbuka — "
+                              "tabnya dibuat saat baris pertama dijalankan."))
+                    return
+                self.koneksi.emit(Hasil(
+                    True, f"Tersambung. Tab portal: {runner.page.url}"))
                 return
             self.tuntas.emit(self._kerjakan(runner))
         finally:

@@ -563,6 +563,7 @@ class BrowserRunner:
         self.cdp_url = cdp_url
         self._playwright = None
         self._browser = None
+        self._konteks = None
         self.page = None
 
     def connect(self):
@@ -586,20 +587,51 @@ class BrowserRunner:
             self.close()
             raise RunnerError("Chrome tersambung tapi tidak punya jendela terbuka")
 
-        # Tab portal kalau ada; kalau tidak, tab baru -- bukan tab pertama yang
-        # kebetulan terbuka. Dengan profil Chrome harian, tab pertama itu bisa
-        # saja email atau pekerjaan lain, dan langkah berikutnya memuat halaman
-        # tambah produk di atasnya.
-        self.page = next(
-            (h for h in konteks.pages if "penyedia.inaproc.id" in h.url),
-            None,
-        ) or konteks.new_page()
+        self._konteks = konteks
+        # Menyambung tidak membuka tab apa pun. Tab baru cuma dibuat kalau
+        # memang ada yang mau diisi -- lihat siapkan_halaman().
+        self.page = self._halaman_terpakai()
         return self
 
+    def _halaman_terpakai(self):
+        """Tab yang boleh dipakai aplikasi, atau None kalau belum ada.
+
+        Tab portal lebih dulu. Kalau belum ada, tab kosong pun boleh dipakai
+        ulang -- itu yang mencegah tab menumpuk: tab yang baru dibuka berisi
+        about:blank, jadi tanpa aturan ini pemanggilan berikutnya tidak
+        mengenalinya dan membuat satu lagi, terus-menerus.
+
+        Tab lain tidak pernah disentuh. Dengan profil Chrome harian, tab
+        pertama bisa saja email atau pekerjaan lain, dan langkah berikutnya
+        memuat halaman tambah produk di atasnya.
+        """
+        if self._konteks is None:
+            return None
+        kosong = None
+        for halaman in self._konteks.pages:
+            try:
+                alamat = halaman.url
+            except Exception:  # noqa: BLE001 -- tab sedang ditutup
+                continue
+            if "penyedia.inaproc.id" in alamat:
+                return halaman
+            if kosong is None and alamat in ("", "about:blank", "chrome://newtab/"):
+                kosong = halaman
+        return kosong
+
+    def siapkan_halaman(self):
+        """Pastikan ada tab siap pakai, membuatnya hanya bila benar-benar perlu."""
+        if self.page is None or self.page.is_closed():
+            self.page = self._halaman_terpakai() or self._konteks.new_page()
+        return self.page
+
     def siap(self) -> bool:
-        return self.page is not None and not self.page.is_closed()
+        if self.page is not None:
+            return not self.page.is_closed()
+        return self._konteks is not None
 
     def buka_form(self) -> None:
+        self.siapkan_halaman()
         if not self.page.url.startswith(URL_TAMBAH):
             self.page.goto(URL_TAMBAH, wait_until="domcontentloaded",
                            timeout=TIMEOUT_PANJANG)
@@ -660,7 +692,8 @@ class BrowserRunner:
                     getattr(obj, tutup)()
             except Exception:  # noqa: BLE001 -- penutupan tidak boleh menggagalkan
                 pass
-        self._browser = self._playwright = self.page = None
+        self._browser = self._playwright = self._konteks = None
+        self.page = None
 
 
 __all__ = [
