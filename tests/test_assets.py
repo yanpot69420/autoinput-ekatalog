@@ -117,22 +117,46 @@ def test_foto_dibatasi_lima(berkas):
 # --- kesiapan ---------------------------------------------------------------
 
 
-def test_tanpa_apa_apa_belum_siap():
+def test_tanpa_apa_apa_tetap_bisa_jalan_lewat_placeholder():
+    """Form mewajibkan minimal satu foto; placeholder membuka jalannya."""
     a = Assets()
-    assert any("Foto" in m for m in a.masalah())
-    # Dokumen wajib berbeda tiap kategori, jadi cuma diingatkan.
+    assert a.masalah() == []
+    assert a.baris_pakai_placeholder(5)
+    # Pemakaiannya tidak boleh diam-diam.
+    assert any("placeholder" in c.lower() for c in a.catatan())
     assert any("dokumen" in c.lower() for c in a.catatan())
-    assert not any("Dokumen" in m for m in a.masalah())
+
+
+def test_tanpa_foto_dan_tanpa_placeholder_belum_siap():
+    a = Assets(pakai_placeholder=False)
+    assert any("Foto" in m for m in a.masalah())
 
 
 def test_foto_khusus_per_baris_tidak_bikin_alarm_palsu(berkas):
     """Ringkasan tidak boleh mengeluh 'belum ada foto' bila tiap baris punya sendiri."""
-    a = Assets()
+    a = Assets(pakai_placeholder=False)
     a.set_foto_baris(5, [berkas["foto"]])
     assert not [m for m in a.masalah() if "belum ada foto" in m]
 
-    kosong = Assets()
+    kosong = Assets(pakai_placeholder=False)
     assert [m for m in kosong.masalah() if "belum ada foto" in m]
+
+
+def test_foto_asli_menang_atas_placeholder(berkas):
+    a = Assets(foto_umum=[berkas["foto"]])
+    assert not a.baris_pakai_placeholder(5)
+    a.set_foto_baris(9, [berkas["foto2"]])
+    assert a.foto_untuk(9) == [berkas["foto2"]]
+    assert not any("placeholder" in c.lower() for c in a.catatan())
+
+
+def test_catatan_menyebut_baris_yang_berfoto_sendiri(berkas):
+    a = Assets()
+    a.set_foto_baris(7, [berkas["foto"]])
+    catatan = " ".join(a.catatan())
+    assert "1 baris berfoto sendiri" in catatan
+    assert not a.baris_pakai_placeholder(7)
+    assert a.baris_pakai_placeholder(8)
 
 
 def test_dokumen_rusak_tetap_jadi_masalah(berkas):
@@ -151,6 +175,7 @@ def test_lengkap_dianggap_siap(berkas):
 
 def test_berkas_hilang_terdeteksi(berkas):
     a = Assets(foto_umum=["/tidak/ada/foto.png"])
+
     a.set_dokumen(SBU, berkas["pdf"])
     assert any("tidak ditemukan" in m for m in a.masalah())
 
@@ -169,6 +194,7 @@ def test_kesiapan_diperiksa_per_baris(berkas):
     assert a.siap(excel_row=5)
 
     a.foto_umum = []
+    a.pakai_placeholder = False
     a.set_foto_baris(5, [berkas["foto"]])
     assert a.siap(excel_row=5)
     assert not a.siap(excel_row=6)
@@ -203,3 +229,45 @@ def test_muat_berkas_rusak_tidak_error(tmp_path):
     book = tmp_path / "produk.xlsx"
     state_path(book).write_text("{bukan json", encoding="utf-8")
     assert Assets.load(book).kosong
+
+
+# --- placeholder ------------------------------------------------------------
+
+
+def test_placeholder_dihasilkan_sebagai_png_sah(tmp_path):
+    """Ditulis sendiri dengan zlib, jadi kelayakannya perlu dibuktikan."""
+    import struct
+
+    from inaproc_autoinput import placeholder
+
+    path = placeholder.buat(tmp_path / "ph.png")
+    data = path.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+
+    lebar, tinggi, kedalaman, tipe = struct.unpack(">IIBB", data[16:26])
+    assert (lebar, tinggi) == (placeholder.SISI, placeholder.SISI)
+    assert kedalaman == 8 and tipe == 2  # RGB
+    # Portal menerima 300x300 sampai 2048x2048.
+    assert 300 <= lebar <= 2048
+
+
+def test_pastikan_membuat_sekali_lalu_memakai_ulang(tmp_path):
+    from inaproc_autoinput import placeholder
+
+    path = tmp_path / "ph.png"
+    assert not path.exists()
+    placeholder.pastikan(path)
+    assert path.exists()
+
+    sebelum = path.stat().st_mtime_ns
+    placeholder.pastikan(path)
+    assert path.stat().st_mtime_ns == sebelum
+
+
+def test_placeholder_ikut_tersimpan(tmp_path, berkas):
+    book = tmp_path / "produk.xlsx"
+    Assets(pakai_placeholder=False).save(book)
+    assert Assets.load(book).pakai_placeholder is False
+
+    Assets().save(book)
+    assert Assets.load(book).pakai_placeholder is True

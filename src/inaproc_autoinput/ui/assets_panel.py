@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..assets import DOKUMEN_LAZIM, IKUT_BERKAS, MAKS_FOTO, Assets, periksa
+from ..placeholder import PLACEHOLDER_PATH
 from ..schema import BATAS_DOKUMEN_MB, DOKUMEN_EXT, FOTO_EXT, VIDEO_EXT
 
 SARINGAN_PDF = "Dokumen PDF (*.pdf)"
@@ -104,6 +106,17 @@ class AssetsPanel(QWidget):
             "Foto untuk semua baris", self._foto_umum,
             [("Pilih…", self._pilih_foto_umum), ("Kosongkan", self._hapus_foto_umum)],
         ))
+
+        self._pakai_ph = QCheckBox(
+            "Pakai foto placeholder bila belum ada foto"
+        )
+        self._pakai_ph.setToolTip(
+            "Form mewajibkan minimal satu foto. Placeholder membuka jalan supaya "
+            "pengisian tidak tertahan, tapi produknya akan terlihat belum berfoto.\n"
+            f"Berkas: {PLACEHOLDER_PATH}"
+        )
+        self._pakai_ph.toggled.connect(self._ubah_placeholder)
+        self._layout.addWidget(self._pakai_ph)
 
         self._foto_khusus = QLabel()
         self._foto_khusus.setStyleSheet(_ABU)
@@ -207,6 +220,11 @@ class AssetsPanel(QWidget):
         self._assets.foto_umum = []
         self._selesai()
 
+    def _ubah_placeholder(self, nyala: bool) -> None:
+        if nyala != self._assets.pakai_placeholder:
+            self._assets.pakai_placeholder = nyala
+            self._selesai()
+
     def _pilih_foto_baris(self) -> None:
         if self._baris is None:
             return
@@ -252,10 +270,20 @@ class AssetsPanel(QWidget):
             label.setStyleSheet(_MERAH if (galat or not berkas) else _HIJAU)
             label.setToolTip(berkas)
 
-        self._foto_umum.setText(self._daftar(self._assets.foto_umum, FOTO_EXT))
-        self._foto_umum.setStyleSheet(
-            _HIJAU if self._assets.foto_umum else _ABU
-        )
+        if self._assets.foto_umum:
+            self._foto_umum.setText(self._daftar(self._assets.foto_umum, FOTO_EXT))
+            self._foto_umum.setStyleSheet(_HIJAU)
+        elif self._assets.pakai_placeholder:
+            self._foto_umum.setText("belum dipilih — memakai placeholder")
+            self._foto_umum.setStyleSheet(_ABU)
+        else:
+            self._foto_umum.setText("belum dipilih")
+            self._foto_umum.setStyleSheet(_MERAH)
+
+        if self._pakai_ph.isChecked() != self._assets.pakai_placeholder:
+            self._pakai_ph.blockSignals(True)
+            self._pakai_ph.setChecked(self._assets.pakai_placeholder)
+            self._pakai_ph.blockSignals(False)
 
         punya_baris = self._baris is not None
         self._btn_foto_baris.setEnabled(punya_baris)
@@ -266,9 +294,13 @@ class AssetsPanel(QWidget):
                 + (f" ({self._nama_baris[:28]})" if self._nama_baris else "")
             )
             khusus = self._assets.foto_baris.get(self._baris, [])
-            self._foto_khusus.setText(
-                self._daftar(khusus, FOTO_EXT) if khusus else "memakai foto umum"
-            )
+            if khusus:
+                teks = self._daftar(khusus, FOTO_EXT)
+            elif self._assets.baris_pakai_placeholder(self._baris):
+                teks = "memakai placeholder"
+            else:
+                teks = "memakai foto umum"
+            self._foto_khusus.setText(teks)
             self._foto_khusus.setStyleSheet(_HIJAU if khusus else _ABU)
         else:
             self._label_khusus.setText("Foto khusus baris terpilih")

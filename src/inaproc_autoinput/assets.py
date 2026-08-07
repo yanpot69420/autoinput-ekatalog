@@ -23,6 +23,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .placeholder import PLACEHOLDER_PATH, adalah_placeholder, pastikan
 from .schema import (
     BATAS_DOKUMEN_MB,
     BATAS_VIDEO_MB,
@@ -83,13 +84,28 @@ class Assets:
     foto_baris: dict[int, list[str]] = field(default_factory=dict)
     video: str = ""
     video_url: str = ""
+    # Baris tanpa foto tidak bisa dijalankan sama sekali karena form mewajibkan
+    # minimal satu. Placeholder membuka jalan, tapi pemakaiannya selalu
+    # dilaporkan -- lihat catatan().
+    pakai_placeholder: bool = True
 
     # --- penggunaan ---------------------------------------------------------
 
     def foto_untuk(self, excel_row: int) -> list[str]:
-        """Foto khusus baris bila ada, selain itu foto umum."""
+        """Foto khusus baris bila ada, lalu foto umum, lalu placeholder."""
         khusus = self.foto_baris.get(excel_row)
-        return list(khusus) if khusus else list(self.foto_umum)
+        if khusus:
+            return list(khusus)
+        if self.foto_umum:
+            return list(self.foto_umum)
+        return [str(pastikan())] if self.pakai_placeholder else []
+
+    def baris_pakai_placeholder(self, excel_row: int) -> bool:
+        foto = self.foto_untuk(excel_row)
+        return bool(foto) and adalah_placeholder(foto[0])
+
+    def baris_berfoto_sendiri(self) -> list[int]:
+        return sorted(self.foto_baris)
 
     def set_foto_baris(self, excel_row: int, berkas: list[str]) -> None:
         if berkas:
@@ -122,10 +138,14 @@ class Assets:
         pesan: list[str] = []
 
         foto = self.foto_untuk(excel_row) if excel_row is not None else self.foto_umum
-        if not foto and not (excel_row is None and self.foto_baris):
-            # Tanpa nomor baris, foto khusus per baris ikut dihitung -- kalau
-            # tidak, ringkasan akan terus mengeluh "belum ada foto" padahal
-            # setiap baris sudah punya fotonya masing-masing.
+        # Tanpa nomor baris, foto khusus per baris ikut dihitung -- kalau tidak,
+        # ringkasan akan terus mengeluh "belum ada foto" padahal setiap baris
+        # sudah punya fotonya masing-masing. Placeholder juga menutup celah ini,
+        # dan pemakaiannya dilaporkan lewat catatan(), bukan sebagai masalah.
+        ada_foto = bool(foto) or self.pakai_placeholder or (
+            excel_row is None and bool(self.foto_baris)
+        )
+        if not ada_foto:
             pesan.append("Foto: belum ada foto dipilih; produk wajib punya minimal satu")
         for berkas in foto:
             galat = periksa(berkas, FOTO_EXT)
@@ -157,10 +177,19 @@ class Assets:
         satu pun. Karena itu "belum ada dokumen" cuma diingatkan, bukan
         dihitung sebagai masalah yang memblokir.
         """
+        pesan = []
+        if not self.foto_umum and self.pakai_placeholder:
+            khusus = len(self.foto_baris)
+            sisa = " kecuali {} baris berfoto sendiri".format(khusus) if khusus else ""
+            pesan.append(
+                f"Semua baris{sisa} akan memakai foto placeholder. Produk yang "
+                "tayang dengan gambar ini terlihat jelas belum berfoto — ganti "
+                "sebelum menyimpan ke portal."
+            )
         if not self.dokumen:
-            return ["Belum ada dokumen dipilih. Kategori konstruksi biasanya "
-                    "mewajibkan SBU dan sertifikat standar."]
-        return []
+            pesan.append("Belum ada dokumen dipilih. Kategori konstruksi biasanya "
+                         "mewajibkan SBU dan sertifikat standar.")
+        return pesan
 
     # --- penyimpanan --------------------------------------------------------
 
@@ -172,6 +201,7 @@ class Assets:
             "foto_baris": {str(k): v for k, v in self.foto_baris.items()},
             "video": self.video,
             "video_url": self.video_url,
+            "pakai_placeholder": self.pakai_placeholder,
         }
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), "utf-8")
         return path
@@ -198,11 +228,13 @@ class Assets:
             foto_baris=baris,
             video=payload.get("video", "") or "",
             video_url=payload.get("video_url", "") or "",
+            pakai_placeholder=bool(payload.get("pakai_placeholder", True)),
         )
 
 
 __all__ = [
     "Assets",
+    "PLACEHOLDER_PATH",
     "DOKUMEN_LAZIM",
     "IKUT_BERKAS",
     "MAKS_FOTO",
