@@ -71,6 +71,45 @@ TIMEOUT_SIMPAN = 6_000
 
 POLA_PRODUK = re.compile(r"/products/[0-9a-f-]{8,}")
 
+# Menandai elemen dengan id acak lalu mengembalikan selektornya. Dipakai karena
+# id asli react-select berubah tiap render, jadi tidak bisa ditulis tetap.
+_TANDAI = """const tandai = el => {
+  if (!el.id) el.id = 'ia-' + Math.random().toString(36).slice(2, 10);
+  return '#' + CSS.escape(el.id);
+};"""
+
+_CARI_KOTAK = _TANDAI + r"""
+(arg => {
+  const rapi = s => (s || '').replace(/\s+/g, ' ').trim();
+  const label = [...document.querySelectorAll('*')].find(
+    e => e.children.length === 0 && rapi(e.textContent).startsWith(arg.teks));
+  if (!label) return null;
+
+  const wadahDari = inp => inp.closest('[class*="control"], [class*="select"]');
+  const layak = inp => inp.placeholder !== 'Pilih Kategori' &&
+      (!arg.dropdown || !!wadahDari(inp) || inp.getAttribute('role') === 'combobox');
+
+  // Berhenti di tingkat pertama yang sudah punya isian layak. Terus naik walau
+  // sudah ketemu berarti menyeberang ke kelompok sebelah, dan kotak milik
+  // kolom lain yang dikembalikan -- pernah terjadi, dan galatnya cuma
+  // "daftar pilihan tidak muncul".
+  let n = label;
+  for (let i = 0; i < 6 && n; i++, n = n.parentElement) {
+    const calon = [...n.querySelectorAll('input:not([type=hidden])')].filter(layak);
+    if (!calon.length) continue;
+    const inp = calon.find(wadahDari) || calon[0];
+    return { klik: tandai(wadahDari(inp) || inp), ketik: tandai(inp) };
+  }
+  return null;
+})"""
+
+_WADAH_DROPDOWN = _TANDAI + r"""
+(sel => {
+  const inp = document.querySelector(sel);
+  const wadah = inp && inp.closest('[class*="control"], [class*="select"]');
+  return wadah ? tandai(wadah) : '';
+})"""
+
 
 class Mode(str, Enum):
     """Sejauh mana aplikasi boleh bertindak."""
@@ -233,12 +272,21 @@ class ProductFormFiller:
             return
         self.page.keyboard.type(teks[-1])
 
-    def _pilih_dropdown(self, pembuka, nilai: str, label: str) -> None:
-        """react-select: klik, ketik, lalu pilih opsi yang cocok."""
+    def _pilih_dropdown(self, pembuka, nilai: str, label: str, kotak=None) -> None:
+        """react-select: klik, ketik, lalu pilih opsi yang cocok.
+
+        Yang diklik `pembuka` -- wadah dropdownnya, bukan input di dalamnya.
+        Input milik react-select lebarnya nyaris nol dan sering tertutup elemen
+        lain, jadi Playwright menolak mengkliknya dan menunggu sampai batas
+        waktu habis tanpa menyebut sebabnya.
+        """
         if not nilai:
             return
         pembuka.click()
-        self._ketik(pembuka, nilai)
+        if kotak is not None:
+            self._ketik(kotak, nilai)
+        else:
+            self.page.keyboard.type(nilai)
         # Hanya opsi yang terlihat. Menu lain yang sudah ditutup tetap ada di DOM,
         # dan kalau ikut terjaring, penantian akan macet pada elemen tersembunyi.
         opsi = self.page.locator(SEL_OPSI_TERLIHAT)
@@ -325,46 +373,72 @@ class ProductFormFiller:
         cocok = re.search(r"Produk\s+(\w+)", petunjuk.first.inner_text())
         return cocok.group(1) if cocok else ""
 
-    def label_atribut(self) -> list[str]:
-        """Label bagian Informasi Utama, berurut sesuai indeks di form.
+    def medan_atribut(self) -> list[dict]:
+        """Kolom Informasi Utama: indeks, label, dan bentuknya.
 
-        Dibaca sekali jalan lewat evaluate. Menanyakan dua atribut per elemen
-        satu per satu berarti enam belas perjalanan ke browser untuk delapan
-        kolom, dan hasilnya sama persis.
+        Dibaca sekali jalan lewat evaluate. Menanyakan tiap elemen satu per satu
+        berarti puluhan perjalanan ke browser untuk delapan kolom.
+
+        Tidak semua kolom berupa kotak teks. Sebagian -- Satuan Pengukuran, SBU
+        Konstruksi, Sertifikat Standar -- adalah dropdown, dan dropdown tidak
+        punya placeholder sama sekali. Labelnya diambil dari teks di sekitarnya
+        ("Pilih Satuan Pengukuran"), karena kalau hanya placeholder yang dibaca,
+        ketiganya terbaca tanpa nama lalu dilewati diam-diam sebagai "tidak ada
+        di form kategori ini".
         """
-        pasangan = self.page.evaluate(
-            """(sel) => [...document.querySelectorAll(sel)]
-                 .map(el => [el.getAttribute('name') || '',
-                             el.getAttribute('placeholder') || ''])""",
+        mentah = self.page.evaluate(
+            """(sel) => [...document.querySelectorAll(sel)].map(el => {
+                 let n = el, sekitar = '';
+                 for (let i = 0; i < 8 && n; i++, n = n.parentElement) {
+                   const t = (n.innerText || '').trim().split('\\n')[0];
+                   if (t && t.length < 70) { sekitar = t; break; }
+                 }
+                 return {
+                   name: el.getAttribute('name') || '',
+                   ph: el.getAttribute('placeholder') || '',
+                   sekitar,
+                   dropdown: !!el.closest('[class*="control"], [class*="select"]'),
+                 };
+               })""",
             SEL_ATRIBUT_UTAMA,
         )
-        hasil: list[str] = []
-        for nama, petunjuk in pasangan:
-            if not re.search(r"\.(\d+)\.value$", nama):
+        hasil: list[dict] = []
+        for m in mentah:
+            cocok = re.search(r"\.(\d+)\.value$", m["name"])
+            if not cocok:
                 continue
-            hasil.append(re.sub(r"^Masukkan\s+", "", petunjuk).strip())
+            label = re.sub(r"^(Masukkan|Pilih)\s+", "",
+                           (m["ph"] or m["sekitar"]).strip()).strip()
+            hasil.append({"indeks": int(cocok.group(1)), "label": label,
+                          "dropdown": bool(m["dropdown"])})
         return hasil
+
+    def label_atribut(self) -> list[str]:
+        """Label bagian Informasi Utama, berurut sesuai indeks di form."""
+        return [m["label"] for m in self.medan_atribut()]
 
     def isi_atribut(self, atribut: dict[str, str]) -> None:
         """Cocokkan Atribut/Nilai dari Excel dengan field di halaman, lewat namanya."""
         if not atribut:
             return
-        tersedia = {
-            _normalisasi(lbl): idx
-            for idx, lbl in enumerate(self.label_atribut())
-            if lbl
-        }
+        tersedia = {_normalisasi(m["label"]): m
+                    for m in self.medan_atribut() if m["label"]}
         for nama, nilai in atribut.items():
-            indeks = tersedia.get(_normalisasi(nama))
-            if indeks is None:
+            medan = tersedia.get(_normalisasi(nama))
+            if medan is None:
                 self.peringatan.append(
                     f"Atribut '{nama}' tidak ada di form kategori ini, dilewati"
                 )
                 continue
-            self._isi(
-                f'input[name="productInformations.mainInformations.{indeks}.value"]',
-                nilai, f"Atribut {nama}",
-            )
+            selektor = (f'input[name="productInformations.mainInformations.'
+                        f'{medan["indeks"]}.value"]')
+            if medan["dropdown"]:
+                # Dropdown menolak diisi langsung: nilainya dikendalikan React,
+                # dan fill() cuma mengubah teks pencariannya tanpa memilih apa
+                # pun. Harus diketik lalu dipilih dari daftar yang muncul.
+                self._pilih_dropdown_selektor(selektor, nilai, f"Atribut {nama}")
+            else:
+                self._isi(selektor, nilai, f"Atribut {nama}")
 
     def isi_lampiran(self, lampiran: dict[str, str]) -> None:
         """Bagian Lampiran hanya dibedakan urutannya, jadi dicocokkan lewat judul."""
@@ -409,6 +483,11 @@ class ProductFormFiller:
         if tipe:
             self._catat(f"Portal menyebut kategori ini bertipe {tipe}")
 
+        # Wajib di form dan baru muncul setelah kategori dipilih. Sebelumnya
+        # tidak pernah diisi sama sekali, jadi setiap produk tertahan di sini.
+        self._pilih_dropdown_dekat("Daftar Produk Sektoral",
+                                   _teks(data.get("produk_sektoral")))
+
         self._isi(SEL_NAMA, _teks(data.get("nama_produk")), "Nama Produk")
         self._isi(SEL_DESKRIPSI, _teks(data.get("deskripsi")), "Deskripsi")
 
@@ -418,19 +497,16 @@ class ProductFormFiller:
         self._unggah(SEL_VIDEO, _teks(assets.video), "Video")
         self._isi(SEL_VIDEO_URL, _teks(assets.video_url), "URL Video")
 
-        self._pilih_dropdown(self._dropdown_dekat("Kode KBKI"),
-                             _teks(data.get("kbki")), "Kode KBKI")
+        self._pilih_dropdown_dekat("Kode KBKI", _teks(data.get("kbki")))
         for kunci, label in (
             ("pdn_klasifikasi", "Klasifikasi Produk"),
             ("pdn_lokasi_produksi", "Lokasi Produksi"),
             ("pdn_tenaga_kerja", "Tenaga Kerja dalam Proses Produksi"),
             ("pdn_bahan_baku", "Bahan Baku dalam Proses Produksi"),
         ):
-            self._pilih_dropdown(self._dropdown_dekat(label),
-                                 _teks(data.get(kunci)), label)
+            self._pilih_dropdown_dekat(label, _teks(data.get(kunci)))
 
-        self._pilih_dropdown(self.page.locator(SEL_PPN).first,
-                             _teks(data.get("ppn")), "PPN")
+        self._pilih_dropdown_selektor(SEL_PPN, _teks(data.get("ppn")), "PPN")
 
         for kunci, selector in SAKLAR.items():
             nilai = _teks(data.get(kunci))
@@ -444,8 +520,7 @@ class ProductFormFiller:
                   "Minimum Pembelian")
         self._isi(SEL_HARGA, _angka(data.get("harga_produk")), "Harga Produk")
         self._isi(SEL_STOK, _angka(data.get("stok")), "Jumlah Stok")
-        self._pilih_dropdown(self._dropdown_dekat("Satuan Produk"),
-                             _teks(data.get("satuan_produk")), "Satuan Produk")
+        self._pilih_dropdown_dekat("Satuan Produk", _teks(data.get("satuan_produk")))
 
         if tipe == TIPE_BARANG:
             self._isi_pengiriman(data)
@@ -474,15 +549,49 @@ class ProductFormFiller:
             kotak.fill(nilai)
             self._catat(f"{label}: {nilai}")
 
-    def _dropdown_dekat(self, label: str):
-        """Pembuka dropdown pada baris berlabel tertentu."""
-        baris = self.page.locator(f'div:has-text("{label}")').last
-        return baris.locator('input[role="combobox"], [class*="control"] input').first
+    def _selektor_dekat(self, label: str, dropdown: bool) -> str:
+        """Selektor kotak isian milik label tertentu, atau string kosong.
+
+        Menggantikan `div:has-text("label")` yang dipakai sebelumnya. Selektor
+        itu cocok dengan setiap div yang memuat teksnya -- termasuk pembungkus
+        seluruh halaman -- lalu `.last` memilih yang paling dalam, yang belum
+        tentu kotak yang dimaksud. Di portal sungguhan itu berujung klik yang
+        kehabisan waktu tiga puluh detik tanpa menyebut sebabnya.
+
+        Sekarang labelnya yang dicari lebih dulu, lalu naik paling banyak
+        delapan tingkat sampai ketemu kotak isian di dalam kelompok yang sama.
+        Kotak kategori utama sengaja ditolak: sebagian label tidak punya kotak
+        sendiri, dan tanpa penolakan ini pencariannya menyeberang ke sana.
+        """
+        return self.page.evaluate(_CARI_KOTAK, {"teks": label, "dropdown": dropdown})
+
+    def _pilih_dropdown_selektor(self, selektor: str, nilai: str, label: str) -> None:
+        """Pilih dropdown yang selektor inputnya sudah diketahui.
+
+        Wadahnya dicari dulu: yang bisa diklik adalah wadah react-select, bukan
+        input di dalamnya. Berlaku untuk PPN dan atribut kategori, yang sama-sama
+        punya selektor tetap.
+        """
+        if not nilai:
+            return
+        wadah = self.page.evaluate(_WADAH_DROPDOWN, selektor) or selektor
+        self._pilih_dropdown(self.page.locator(wadah).first, nilai, label,
+                             self.page.locator(selektor).first)
+
+    def _pilih_dropdown_dekat(self, label: str, nilai: str) -> None:
+        """Cari dropdown lewat labelnya, lalu pilih nilainya."""
+        if not nilai:
+            return
+        kotak = self._selektor_dekat(label, dropdown=True)
+        if not kotak:
+            self.peringatan.append(f"{label}: kolomnya tidak ketemu di form, dilewati")
+            return
+        self._pilih_dropdown(self.page.locator(kotak["klik"]).first, nilai, label,
+                             self.page.locator(kotak["ketik"]).first)
 
     def _input_dekat(self, label: str):
-        baris = self.page.locator(f'div:has-text("{label}")').last
-        kotak = baris.locator('input[type="text"], input:not([type])').first
-        return kotak if kotak.count() else None
+        kotak = self._selektor_dekat(label, dropdown=False)
+        return self.page.locator(kotak["ketik"]).first if kotak else None
 
     # --- penyimpanan --------------------------------------------------------
 

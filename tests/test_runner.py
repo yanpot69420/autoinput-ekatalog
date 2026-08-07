@@ -616,3 +616,41 @@ def test_mode_str_dibakukan_di_jalankan():
     runner.page = PageDiam()
     hasil = runner.jalankan({"kategori": "A > B > C"}, "simpan", batal=lambda: True)
     assert hasil.dibatalkan and not hasil.tersimpan
+
+
+# --- atribut berbentuk dropdown ---------------------------------------------
+
+
+@pytestmark_browser
+def test_atribut_dropdown_ikut_terbaca_labelnya(halaman):
+    """Dropdown tidak punya placeholder; labelnya ada di teks sekitarnya.
+
+    Kalau hanya placeholder yang dibaca, atribut seperti Satuan Pengukuran
+    terbaca tanpa nama lalu dilewati diam-diam sebagai "tidak ada di form
+    kategori ini" — padahal kolomnya jelas ada di layar.
+    """
+    pengisi = ProductFormFiller(halaman)
+    pengisi.pilih_kategori(
+        "Bidang Bina Marga > Divisi 3 Pekerjaan Tanah dan Geosintetik > 3.1 Galian")
+
+    medan = pengisi.medan_atribut()
+    lewat_label = {m["label"] for m in medan}
+    assert "Satuan Pengukuran" in lewat_label
+    assert "Kode Produk" in lewat_label
+
+    dropdown = [m for m in medan if m["dropdown"]]
+    assert dropdown and dropdown[0]["label"] == "Satuan Pengukuran"
+
+
+@pytestmark_browser
+def test_atribut_dropdown_terisi_bukan_dilewati(halaman, berkas):
+    """Inputnya nyaris tak berukuran, jadi yang harus diklik wadahnya."""
+    pengisi = ProductFormFiller(halaman)
+    pengisi.isi(_baris(berkas), _assets(berkas))
+
+    nilai = halaman.evaluate(
+        """() => [...document.querySelectorAll(
+             '[name^="productInformations.mainInformations."]')].map(e => e.value)""")
+    assert nilai[0] == "M3", f"atribut dropdown tidak terisi: {nilai}"
+    assert nilai[1] == "BNS-GAL-01"
+    assert not [p for p in pengisi.peringatan if "Satuan Pengukuran" in p]

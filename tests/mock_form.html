@@ -82,6 +82,14 @@ const POHON = {
 };
 const TIPE = { "Bidang Bina Marga": "Jasa", "Peralatan Kantor": "Barang" };
 
+// Sebagian atribut di portal berupa dropdown, bukan kotak teks: tanpa
+// placeholder, dengan label hanya di teks sekitarnya ("Pilih Satuan
+// Pengukuran"), dan inputnya nyaris tak berukuran sehingga menolak diklik
+// langsung. Ditiru di sini karena ketiganya pernah membuat atribut dilewati
+// diam-diam.
+const ATRIBUT_DROPDOWN = {
+  "Satuan Pengukuran": ["M3", "Buah", "Pasang", "LS"],
+};
 const ATRIBUT = {
   "3.1 Galian": ["Satuan Pengukuran", "Kode Produk", "Lingkup Kegiatan",
                  "Lokasi Layanan (Kecamatan)"],
@@ -199,10 +207,48 @@ function gambarSpesifikasi(level3) {
   (ATRIBUT[level3] || []).forEach((label, i) => {
     const baris = document.createElement("div");
     baris.className = "baris";
+    const nama = `productInformations.mainInformations.${i}.value`;
+
+    if (ATRIBUT_DROPDOWN[label]) {
+      const wadah = document.createElement("div");
+      wadah.className = "select__control";
+      wadah.style.cssText = "border:1px solid #bbb;padding:6px;cursor:pointer";
+      const tampil = document.createElement("div");
+      tampil.textContent = `Pilih ${label}`;
+      wadah.appendChild(tampil);
+      const kotak = document.createElement("input");
+      kotak.type = "text";
+      kotak.name = nama;
+      kotak.style.cssText = "width:1px;opacity:0";   // menolak diklik langsung
+      wadah.appendChild(kotak);
+      const menu = document.createElement("div");
+      menu.className = "menu"; menu.hidden = true;
+      wadah.appendChild(menu);
+      const gambar = () => {
+        const ketikan = kotak.value.toLowerCase();
+        menu.innerHTML = "";
+        ATRIBUT_DROPDOWN[label]
+          .filter(o => o.toLowerCase().includes(ketikan)).forEach(o => {
+            const item = document.createElement("div");
+            item.className = "option";
+            item.setAttribute("role", "option");
+            item.textContent = o;
+            item.onclick = () => { kotak.value = o; menu.hidden = true; };
+            menu.appendChild(item);
+          });
+        menu.hidden = false;
+      };
+      wadah.onclick = () => { kotak.focus(); gambar(); };
+      kotak.addEventListener("input", gambar);
+      baris.appendChild(wadah);
+      spek.appendChild(baris);
+      return;
+    }
+
     baris.innerHTML = `<label>${label}</label>`;
     const kotak = document.createElement("input");
     kotak.type = "text";
-    kotak.name = `productInformations.mainInformations.${i}.value`;
+    kotak.name = nama;
     kotak.id = `form-product-productInformations-mainInformations-${i}-input`;
     kotak.placeholder = `Masukkan ${label}`;
     baris.appendChild(kotak);
